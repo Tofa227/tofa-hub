@@ -261,6 +261,7 @@ body.locked{position:fixed;left:0;right:0;overflow:hidden}
 .famt{text-align:right;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:14.5px}
 .famt.pos{color:var(--green)}
 .famt small{display:block;color:var(--muted);font-size:11.5px;font-weight:400}
+.fdebt{display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;font-size:14px}.fdebt span:last-child{color:var(--muted);text-align:right}
 .chipx{display:inline-block;padding:8px 12px;border-radius:12px;background:var(--accent-dim);color:var(--accent2);font-size:13.5px}
 .frem{display:flex;align-items:center;gap:10px;font-size:14px;margin:4px 0 14px;color:var(--muted)}
 .frem input{width:18px;height:18px;accent-color:var(--accent)}
@@ -1106,7 +1107,7 @@ function openModel(id) { const m = findModel(id), l = m && (m.link || m.url); if
 const FCATS = {
   food: ['🛒', 'Продукты'], delivery: ['🍔', 'Доставка еды'], cafe: ['🥤', 'Кафе и снеки'], transport: ['🚆', 'Транспорт'], fuel: ['⛽', 'Топливо'],
   ai: ['🤖', 'ИИ и софт'], print: ['🖨️', '3D печать'], fun: ['🎮', 'Подписки и игры'], net: ['🌐', 'Интернет и связь'], home: ['🏠', 'Жильё и счета'],
-  health: ['💊', 'Здоровье'], tobacco: ['🚬', 'Табак'], shop: ['🛍️', 'Покупки'], people: ['↔️', 'Переводы'], income: ['💰', 'Доходы'], other: ['📦', 'Прочее'],
+  health: ['💊', 'Здоровье'], tobacco: ['🚬', 'Табак'], shop: ['🛍️', 'Покупки'], people: ['↔️', 'Переводы'], debt: ['🤝', 'Долги и займы'], income: ['💰', 'Доходы'], other: ['📦', 'Прочее'],
 };
 // Встроенные правила: слово/фраза в описании → категория (порядок важен)
 const FRULES = [
@@ -1165,7 +1166,9 @@ function fcls(t) {
   let cat = t.cat;
   if (!cat) { const r = S.fin.rules.find(r => n.includes(r.m)); if (r) cat = r.cat; }
   if (!cat) { const r = FRULES.find(([, ks]) => ks.some(k => fhas(n, k))); if (r) cat = r[0]; }
-  if (!cat) cat = t.y === 'transfer' ? 'people' : kind === 'inc' ? 'income' : 'other';
+  if (!cat) cat = t.y === 'transfer' ? (/^ (перевод получатель|перевод отправитель|transfer from|payment from) /.test(n) ? 'debt' : 'people') : kind === 'inc' ? 'income' : 'other';
+  // долги и займы между людьми — не расходы и не доходы, считаются отдельно
+  if (cat === 'debt' && kind !== 'int') { kind = 'debt'; why = t.a < 0 ? 'Отдал в долг / вернул долг' : 'Вернули долг / взял в долг'; }
   return { kind, cat, why, check };
 }
 
@@ -1260,7 +1263,9 @@ function finMonthData(ym) {
   const rows = S.fin.tx.filter(t => t.d.startsWith(ym)).map(t => ({ t, k: fcls(t), v: hufOf(t) }));
   const exp = rows.filter(r => r.k.kind === 'exp'), inc = rows.filter(r => r.k.kind === 'inc');
   const by = {}; exp.forEach(r => by[r.k.cat] = (by[r.k.cat] || 0) - r.v);
-  return { rows, spent: exp.reduce((s, r) => s - r.v, 0), earned: inc.reduce((s, r) => s + r.v, 0), by };
+  const debt = rows.filter(r => r.k.kind === 'debt');
+  return { rows, spent: exp.reduce((s, r) => s - r.v, 0), earned: inc.reduce((s, r) => s + r.v, 0), by,
+    gave: debt.filter(r => r.v < 0).reduce((s, r) => s - r.v, 0), got: debt.filter(r => r.v > 0).reduce((s, r) => s + r.v, 0) };
 }
 SCREENS.finance = () => {
   const action = `<button class="ib accent" onclick="document.getElementById('finfile').click()">${I.plus}</button>`;
@@ -1285,15 +1290,16 @@ SCREENS.finance = () => {
           <span class="fl1"><span>${FCATS[c][0]} ${FCATS[c][1]}</span><span>${ft(v)}</span></span>
           <span class="ftrack"><i style="width:${Math.max(2, v / max * 100)}%"></i></span><small>${Math.round(v / cur.spent * 100)}%</small></button>`).join('')
         : '<div class="empty">Трат в этом месяце нет</div>'}</div>
-      <p class="hint">🔁 Пополнения со своей карты, обмены валют и переводы между своими счетами в расходы не входят. Нажми на категорию, чтобы увидеть операции.</p>`;
+      ${cur.gave || cur.got ? `<button class="card mb fdebt" onclick="S.ui.finCat='debt';setUI('finTab','ops')"><span>🤝 Долги и займы</span><span>${cur.gave ? `отдал ${ft(cur.gave)}` : ''}${cur.gave && cur.got ? ' · ' : ''}${cur.got ? `получил ${ft(cur.got)}` : ''}</span></button>` : ''}
+      <p class="hint">🔁 Пополнения со своей карты, обмены валют и переводы между своими счетами в расходы не входят, долги и займы — тоже. Нажми на категорию, чтобы увидеть операции.</p>`;
   } else {
     const fc = S.ui.finCat;
-    const rows = cur.rows.filter(r => !fc || (r.k.cat === fc && r.k.kind === 'exp'));
+    const rows = cur.rows.filter(r => !fc || (r.k.cat === fc && (r.k.kind === 'exp' || r.k.kind === 'debt')));
     const days = {}; rows.forEach(r => (days[r.t.d.slice(0, 10)] = days[r.t.d.slice(0, 10)] || []).push(r));
-    body = `${fc ? `<button class="chipx mb" onclick="setUI('finCat','')">${FCATS[fc][0]} ${FCATS[fc][1]} · ${ft(cur.by[fc] || 0)} ✕</button>` : ''}
+    body = `${fc ? `<button class="chipx mb" onclick="setUI('finCat','')">${FCATS[fc][0]} ${FCATS[fc][1]}${fc === 'debt' ? '' : ' · ' + ft(cur.by[fc] || 0)} ✕</button>` : ''}
       ${Object.keys(days).sort().reverse().map(d => `<div class="fday">${WD[(toD(d).getDay() + 6) % 7]}, ${fmt(d)}</div><div class="card fops">${days[d].map(({ t, k, v }) => `<button class="fop ${k.kind === 'int' ? 'int' : ''}" onclick="finOp('${t.id}')">
           <span class="fic">${k.kind === 'int' ? '🔁' : FCATS[k.cat][0]}</span>
-          <span class="grow"><b>${esc(t.s)}</b><small>${k.kind === 'int' ? 'не учитывается' + (k.check ? ' · проверь' : '') : FCATS[k.cat][1]} · ${BANKS[t.b] || t.b} · ${t.d.slice(11, 16)}</small></span>
+          <span class="grow"><b>${esc(t.s)}</b><small>${k.kind === 'int' ? 'не учитывается' + (k.check ? ' · проверь' : '') : k.kind === 'debt' ? 'долг · не в расходах' : FCATS[k.cat][1]} · ${BANKS[t.b] || t.b} · ${t.d.slice(11, 16)}</small></span>
           <span class="famt ${v > 0 ? 'pos' : ''}">${v > 0 ? '+' : ''}${ft(v)}${t.c !== 'HUF' ? `<small>${t.a > 0 ? '+' : '−'}${Math.abs(t.a).toFixed(2)} ${t.c}</small>` : ''}</span></button>`).join('')}</div>`).join('') || '<div class="empty">Нет операций</div>'}`;
   }
   return { title: 'Финансы', tab: '', action, body: inputEl + head + seg + body + `<button class="btn ghost" style="margin-top:16px" onclick="finSettings()">⚙️ Курсы, правила, данные</button>` };
@@ -1306,7 +1312,7 @@ function finOp(id) {
     ${t.f ? `<div class="cl"><span>Комиссия</span><span>${t.f} ${t.c}</span></div>` : ''}
     <div class="cl"><span>Дата</span><span>${fmt(t.d.slice(0, 10))} ${t.d.slice(11, 16)}</span></div>
     <div class="cl"><span>Банк</span><span>${BANKS[t.b] || t.b}</span></div>
-    ${k.kind === 'int' ? `<div class="card mb" style="margin-top:10px;font-size:13.5px">🔁 ${k.why}</div>` : ''}
+    ${k.kind === 'int' || k.kind === 'debt' ? `<div class="card mb" style="margin-top:10px;font-size:13.5px">${k.kind === 'int' ? '🔁' : '🤝'} ${k.why}${k.kind === 'debt' ? '. Не входит в расходы — если это была покупка, выбери другую категорию.' : ''}</div>` : ''}
     <div id="fform" style="margin-top:12px">
       <label class="fl"><span>Категория</span><select id="fcat">${Object.entries(FCATS).map(([c, [e, l]]) => `<option value="${c}" ${c === k.cat ? 'selected' : ''}>${e} ${l}</option>`).join('')}</select></label>
       <label class="frem"><input type="checkbox" id="frem" checked> Запомнить для всех «${esc(t.s)}»</label>
