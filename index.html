@@ -1093,7 +1093,7 @@ function addMissingToShop(id) {
 /* ---- Цена и фото по ссылке ----
    Браузер не может напрямую читать чужие сайты, поэтому страница загружается
    через маленький прокси (Cloudflare Worker, код в worker.js). Адрес — META_PROXY. */
-let META_PROXY = ''; // ← сюда адрес воркера, например https://tofa-meta.xxx.workers.dev
+let META_PROXY = 'https://tofa-hub.mc0andre0tofan.workers.dev/'; // Cloudflare Worker (worker.js)
 async function linkFetch(btn, mode) {
   const box = btn.closest('.fl'), url = box.querySelector('input[type=url]').value.trim();
   if (!/^https?:\/\//.test(url)) return toast('Вставь ссылку, начинающуюся с https://');

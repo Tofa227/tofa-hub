@@ -10,4 +10,4 @@
 
 1. dash.cloudflare.com → Workers & Pages → Create → Create Worker → Deploy.
 2. Edit code → вставить содержимое `worker.js` → Deploy.
-3. Адрес воркера (`https://….workers.dev`) вписать в `META_PROXY` в `index.html`.
+3. Адрес воркера вписан в `META_PROXY` в `index.html`: https://tofa-hub.mc0andre0tofan.workers.dev/ (выкладывается автоматически из этого репозитория через `wrangler.toml`).
