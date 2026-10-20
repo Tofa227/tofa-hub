@@ -192,6 +192,11 @@ svg{display:block}
 .toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translate(-50%,20px);opacity:0;z-index:60;background:#1a2a44;border:1px solid var(--line2);padding:10px 16px;border-radius:12px;font-size:14px;transition:.25s;pointer-events:none;white-space:nowrap}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 
+/* sync */
+.syncpill{position:absolute;left:0;top:20px;z-index:1;font-size:11px;padding:5px 9px;border-radius:20px;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.syncpill.ok{color:var(--accent2)}.syncpill.err{color:var(--orange)}
+.setinfo{font-size:13.5px;line-height:1.7}.setinfo .muted{color:var(--muted)}
+
 /* photos */
 .thumb,.rec .img,.spool{overflow:hidden}
 .thumb img,.rec .img img,.spool img{width:100%;height:100%;object-fit:cover;display:block}
@@ -311,18 +316,116 @@ function seed() {
       { id: uid(), emoji: '🐉', name: 'Фигурка Дракон', tag: 'Декор', link: '' },
       { id: uid(), emoji: '📦', name: 'Корпус для электроники', tag: 'Электроника', link: '' },
     ],
+    meta: { v: 0 },
     ui: { fridgeTab: 'products', recCat: 'Все', recQ: '', printTab: 'fil', weightTab: 'chart', selDate: null },
   };
 }
-let S;
-try { S = JSON.parse(localStorage.getItem(STORE)); } catch (e) {}
-if (!S || !S.products) S = seed();
-S.ui.selDate = today();
+/* ===================== STORAGE & SYNC =====================
+   Данные каждого пользователя:
+   - на устройстве: localStorage под ключом с его Telegram ID
+   - в облаке: Telegram CloudStorage — личное хранилище этого пользователя в этом боте,
+     другие пользователи (и разработчик) его не видят.
+   Синхронизация: «побеждает последнее изменение» (метка времени S.meta.v). */
+const TG_USER = (() => { try { return tg.initDataUnsafe.user || null; } catch (e) { return null; } })();
+const OWNER_ID = 0; // ← впиши сюда свой Telegram ID (видно в настройках), чтобы приложение открывалось ТОЛЬКО тебе. 0 = открыто всем, у каждого свои данные
+const LOCKED = !!OWNER_ID && (!TG_USER || TG_USER.id !== OWNER_ID);
+const CLOUD = !LOCKED && !!(TG_USER && tg.CloudStorage && tg.isVersionAtLeast && tg.isVersionAtLeast('6.9'));
+const LKEY = `${STORE}:${TG_USER ? TG_USER.id : 'web'}`;
+const DATA_KEYS = ['products', 'recipes', 'workouts', 'weights', 'filaments', 'models'];
 let canStore = false;
 try { localStorage.setItem('__t', '1'); localStorage.removeItem('__t'); canStore = true; } catch (e) {}
-const save = () => { if (!canStore) return; try { localStorage.setItem(STORE, JSON.stringify(S)); } catch (e) { toast('Память заполнена — удали пару фото'); } };
-const pic = (o, fb) => o.photo ? `<img src="${esc(o.photo)}" alt="">` : fb;
-save();
+const lsGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
+const lsSet = (k, v) => { if (!canStore) return true; try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
+
+let S = lsGet(LKEY);
+let PH = lsGet(LKEY + ':ph') || {}; // фото: id → dataURL
+if (!S) { const old = lsGet(STORE); if (old && old.products) { S = old; S.meta = { v: 1 }; try { localStorage.removeItem(STORE); } catch (e) {} } }
+if (!S || !S.products) S = seed();
+S.meta = S.meta || { v: 0 };
+S.ui = Object.assign(seed().ui, S.ui || {});
+S.ui.selDate = today();
+
+const photoSrc = p => !p ? '' : p.startsWith('data:') ? p : (PH[p] || '');
+const pic = (o, fb) => { const s = photoSrc(o.photo); return s ? `<img src="${esc(s)}" alt="">` : fb; };
+const allItems = () => [...S.products, ...S.recipes, ...S.filaments, ...S.models];
+const refPhotos = () => new Set(allItems().map(o => o.photo).filter(p => p && !p.startsWith('data:')));
+function normalizePhotos() { allItems().forEach(o => { if (o.photo && o.photo.startsWith('data:')) { const id = 'ph' + uid() + uid(); PH[id] = o.photo; o.photo = id; } }); }
+function saveLocal() {
+  const refs = refPhotos(); Object.keys(PH).forEach(k => { if (!refs.has(k)) delete PH[k]; });
+  if (!lsSet(LKEY, S) || !lsSet(LKEY + ':ph', PH)) toast('Память устройства заполнена — удали пару фото');
+}
+// sync=true — реальное изменение данных (уходит в облако); false — только UI (вкладки и т.п.)
+function save(sync = true) { if (sync) { normalizePhotos(); S.meta.v = Date.now(); } saveLocal(); if (sync) schedulePush(); }
+
+let syncState = CLOUD ? 'sync' : 'local', lastSync = 0, cloudKeys = new Set(), pushTimer = null, chain = Promise.resolve(), dirty = false;
+const cs = (m, ...a) => new Promise((res, rej) => {
+  const t = setTimeout(() => rej(new Error('timeout')), 15000);
+  try { tg.CloudStorage[m](...a, (e, v) => { clearTimeout(t); e ? rej(e) : res(v); }); } catch (e) { clearTimeout(t); rej(e); }
+});
+const CHUNK = 4000;
+const split = s => { const o = []; for (let i = 0; i < s.length; i += CHUNK) o.push(s.slice(i, i + CHUNK)); return o.length ? o : ['']; };
+async function getMany(keys) { const o = {}; for (let i = 0; i < keys.length; i += 20) Object.assign(o, await cs('getItems', keys.slice(i, i + 20))); return o; }
+async function removeMany(keys) { for (let i = 0; i < keys.length; i += 20) { const b = keys.slice(i, i + 20); await cs('removeItems', b); b.forEach(k => cloudKeys.delete(k)); } }
+async function put(k, v) { await cs('setItem', k, v); cloudKeys.add(k); }
+function syncPill() {
+  const m = { local: ['📱', 'Только это устройство'], sync: ['⏳', 'Синхронизация…'], ok: ['☁️', 'Синхронизировано'], err: ['⚠️', 'Нет связи с облаком'] }[syncState];
+  return `<span class="syncpill ${syncState}" id="syncpill">${m[0]} ${m[1]}</span>`;
+}
+function setSync(st) { syncState = st; if (st === 'ok') lastSync = Date.now(); const el = document.getElementById('syncpill'); if (el) el.outerHTML = syncPill(); }
+const queue = fn => (chain = chain.then(fn).catch(e => { console.warn('sync', e); setSync('err'); }));
+function schedulePush() { if (!CLOUD) return; dirty = true; setSync('sync'); clearTimeout(pushTimer); pushTimer = setTimeout(() => { pushTimer = null; queue(push); }, 700); }
+
+async function push() {
+  dirty = false;
+  const data = {}; DATA_KEYS.forEach(k => data[k] = S[k]);
+  const parts = split(JSON.stringify(data));
+  for (let i = 0; i < parts.length; i++) await put('d_' + i, parts[i]);
+  await put('d_meta', JSON.stringify({ n: parts.length, v: S.meta.v }));
+  await removeMany([...cloudKeys].filter(k => /^d_\d+$/.test(k) && +k.slice(2) >= parts.length));
+  const refs = refPhotos();
+  const inCloud = new Set([...cloudKeys].filter(k => /^p_.+_n$/.test(k)).map(k => k.slice(2, -2)));
+  for (const id of refs) {
+    if (inCloud.has(id) || !PH[id]) continue;
+    const pp = split(PH[id]);
+    if (cloudKeys.size + pp.length + 1 > 1000) { toast('Облако почти заполнено — новое фото только на этом устройстве'); break; }
+    for (let i = 0; i < pp.length; i++) await put(`p_${id}_${i}`, pp[i]);
+    await put(`p_${id}_n`, String(pp.length));
+  }
+  const gone = [...inCloud].filter(id => !refs.has(id));
+  if (gone.length) await removeMany([...cloudKeys].filter(k => gone.some(id => k.startsWith(`p_${id}_`))));
+  if (!dirty) setSync('ok');
+}
+
+async function pull() {
+  if (dirty) return;
+  setSync('sync');
+  cloudKeys = new Set(await cs('getKeys'));
+  if (!cloudKeys.has('d_meta')) return push(); // облако пустое — первая загрузка
+  const meta = JSON.parse((await getMany(['d_meta'])).d_meta || '{}');
+  const cv = meta.v || 0, lv = S.meta.v || 0;
+  if (cv > lv) {
+    const ks = [...Array(meta.n || 0)].map((_, i) => 'd_' + i), got = await getMany(ks);
+    const data = JSON.parse(ks.map(k => got[k] || '').join(''));
+    if (dirty) return; // пользователь успел что-то изменить — его версия новее
+    DATA_KEYS.forEach(k => { if (Array.isArray(data[k])) S[k] = data[k]; });
+    S.meta.v = cv; saveLocal(); render();
+  } else if (cv < lv) return push();
+  const need = [...refPhotos()].filter(id => !PH[id] && cloudKeys.has(`p_${id}_n`));
+  if (need.length) {
+    const ns = await getMany(need.map(id => `p_${id}_n`));
+    for (const id of need) { const n = +ns[`p_${id}_n`] || 0; if (!n) continue; const ks = [...Array(n)].map((_, i) => `p_${id}_${i}`), g = await getMany(ks); PH[id] = ks.map(k => g[k] || '').join(''); }
+    saveLocal(); render();
+  }
+  if ([...refPhotos()].some(id => PH[id] && !cloudKeys.has(`p_${id}_n`))) return push(); // фото, добавленные офлайн
+  setSync('ok');
+}
+function flushPush() { if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; queue(push); } }
+if (CLOUD) {
+  queue(pull);
+  try { tg.onEvent('activated', () => { flushPush(); queue(pull); }); tg.onEvent('deactivated', flushPush); } catch (e) {}
+  document.addEventListener('visibilitychange', () => { if (document.hidden) flushPush(); else queue(pull); });
+}
+saveLocal();
 
 /* ===================== ROUTER ===================== */
 let stack = [{ name: 'home' }];
@@ -337,6 +440,7 @@ const nav = tab => `<nav class="nav">${NAV.map(([k, l, ic]) => `<button class="$
 function render() {
   const c = cur();
   const app = document.getElementById('app');
+  if (LOCKED) { app.innerHTML = `<div class="home" style="justify-content:center;align-items:center;text-align:center"><div style="font-size:56px">🔒</div><h2 style="margin:14px 0 6px">Личное приложение</h2><p style="color:var(--muted)">Доступ есть только у владельца.</p></div>`; return; }
   if (c.name === 'home') app.innerHTML = Home();
   else {
     const s = SCREENS[c.name](c.p || {});
@@ -353,7 +457,7 @@ function Home() {
   const tile = (k, ic, t, s, badge) => `<button class="tile" onclick="go('${k}')">${badge || ''}<div class="ic">${ic}</div><b>${t}</b><small>${s}</small></button>`;
   return `<div class="home">
     <div class="hero">${mountains}
-      <button class="gear" onclick="settings()">${I.gear}</button>
+      ${syncPill()}<button class="gear" onclick="settings()">${I.gear}</button>
       <div class="logo">TOFA</div><div class="logo-sub">LIFE HUB</div>
       <h1>Привет, ${esc(userName)}!</h1><p>Все важное в одном месте</p>
     </div>
@@ -401,7 +505,7 @@ function recipeView(id) {
   const r = S.recipes.find(x => x.id === id);
   const have = n => S.products.some(p => p.name.toLowerCase().includes(n.toLowerCase()) || n.toLowerCase().includes(p.name.toLowerCase()));
   const cnt = r.ing.filter(have).length;
-  openSheet(`${r.photo ? `<img class="hero-img" src="${esc(r.photo)}" alt="">` : ''}<h3>${r.photo ? '' : esc(r.emoji) + ' '}${esc(r.name)}</h3>
+  openSheet(`${photoSrc(r.photo) ? `<img class="hero-img" src="${esc(photoSrc(r.photo))}" alt="">` : ''}<h3>${photoSrc(r.photo) ? '' : esc(r.emoji) + ' '}${esc(r.name)}</h3>
     <div class="rec" style="padding:0;border:0;background:none"><div class="info" style="margin:0 0 12px"><span>${I.clock}${r.time} мин</span><span>${I.chef}${esc(r.level)}</span><span>${esc(r.cat)}</span></div></div>
     <div class="h3" style="margin-top:0">Ингредиенты · есть ${cnt} из ${r.ing.length}</div>
     ${r.ing.map(i => `<div class="ing"><span>${esc(i)}</span>${have(i) ? '<span class="y">✓ есть</span>' : '<span class="n">нет</span>'}</div>`).join('')}
@@ -580,7 +684,7 @@ function openForm(o) {
   openSheet(`<h3>${o.title}</h3><div id="fform">${o.fields.map(f => {
     const val = v[f.key] ?? '';
     if (f.type === 'photo') return `<div class="fl"><span>${f.label || 'Фото'}</span><div class="ph-field">
-      <div class="ph-prev" id="phprev">${val ? `<img src="${esc(val)}" alt="">` : I.camera}</div>
+      <div class="ph-prev" id="phprev">${photoSrc(val) ? `<img src="${esc(photoSrc(val))}" alt="">` : I.camera}</div>
       <div class="ph-btns"><label class="ph-btn">${val ? 'Заменить фото' : 'Добавить фото'}<input type="file" accept="image/*" onchange="pickPhoto(this)"></label>
       <button type="button" class="ph-btn del" onclick="clearPhoto()">Убрать фото</button></div></div>
       <input type="hidden" name="${f.key}" id="phval" value="${esc(val)}"></div>`;
@@ -589,15 +693,15 @@ function openForm(o) {
   }).join('')}<button class="btn primary" type="button" style="margin-top:6px" onclick="submitForm()">Сохранить</button></div>`);
 }
 let formFields = [];
-// Фото сжимается до 400px по длинной стороне (JPEG), чтобы влезало в память
+// Фото сжимается до 320px по длинной стороне (JPEG), чтобы влезало в память
 function pickPhoto(inp) {
   const file = inp.files && inp.files[0]; if (!file) return;
   const url = URL.createObjectURL(file), img = new Image();
   img.onload = () => {
-    const M = 400, s = Math.min(1, M / Math.max(img.width, img.height));
+    const M = 320, s = Math.min(1, M / Math.max(img.width, img.height));
     const c = document.createElement('canvas'); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
     c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-    const d = c.toDataURL('image/jpeg', 0.8); URL.revokeObjectURL(url);
+    const d = c.toDataURL('image/jpeg', 0.72); URL.revokeObjectURL(url);
     document.getElementById('phval').value = d;
     document.getElementById('phprev').innerHTML = `<img src="${d}" alt="">`;
     hap();
@@ -616,15 +720,24 @@ function submitForm() {
 }
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.closest && e.target.closest('#fform') && e.target.tagName === 'INPUT') { e.preventDefault(); submitForm(); } });
 let acts = [];
-function openActions(title, list) { acts = list; openSheet(`<h3>${esc(title)}</h3>${list.map((a, i) => `<button class="act ${a.danger ? 'danger' : ''}" onclick="runAct(${i})">${a.label}</button>`).join('')}<button class="act" style="text-align:center;color:var(--muted)" onclick="closeSheet()">Отмена</button>`); }
-function runAct(i) { const a = acts[i]; if (!a.keep) closeSheet(); a.fn(); hap(); save(); if (!a.keep) render(); }
+function openActions(title, list, extra = '') { acts = list; openSheet(`<h3>${esc(title)}</h3>${extra}${list.map((a, i) => `<button class="act ${a.danger ? 'danger' : ''}" onclick="runAct(${i})">${a.label}</button>`).join('')}<button class="act" style="text-align:center;color:var(--muted)" onclick="closeSheet()">Отмена</button>`); }
+function runAct(i) { const a = acts[i]; if (!a.keep) closeSheet(); a.fn(); hap(); if (!a.keep && !a.nosave) save(); if (!a.keep) render(); }
 function delItem(col, id) { S[col] = S[col].filter(x => x.id !== id); save(); closeSheet(); render(); toast('Удалено'); }
-function setUI(k, v) { hap(); S.ui[k] = v; save(); render(); }
+function setUI(k, v) { hap(); S.ui[k] = v; save(false); render(); }
 function openLink(u) { try { tg.openLink(u); } catch (e) { window.open(u, '_blank'); } }
 function settings() {
-  openActions('Настройки', [
-    { label: 'Экспорт данных (скопировать JSON)', fn: () => { navigator.clipboard?.writeText(JSON.stringify(S)).then(() => toast('Скопировано'), () => toast('Не удалось скопировать')); } },
-    { label: 'Сбросить к демо-данным', danger: 1, fn: () => { S = seed(); S.ui.selDate = today(); toast('Данные сброшены'); } }]);
+  const who = TG_USER ? `${esc(TG_USER.first_name || '')} · ID <b>${TG_USER.id}</b>` : 'Открыто вне Telegram';
+  const t = lastSync ? new Date(lastSync).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }) : '';
+  const info = `<div class="card mb setinfo"><div>👤 ${who}</div>
+    <div>${CLOUD ? `☁️ Облако Telegram: занято ${cloudKeys.size} из 1024 ячеек` : '📱 Данные хранятся только на этом устройстве'}</div>
+    ${t ? `<div class="muted">Последняя синхронизация: ${t}</div>` : ''}
+    <div class="muted" style="margin-top:6px">🔒 Данные привязаны к твоему Telegram-аккаунту. Другие пользователи бота их не видят — у каждого своё хранилище.</div></div>`;
+  const list = [];
+  if (CLOUD) list.push({ label: 'Синхронизировать сейчас', nosave: 1, fn: () => { flushPush(); queue(pull); } });
+  if (TG_USER) list.push({ label: 'Скопировать мой Telegram ID', nosave: 1, fn: () => { navigator.clipboard?.writeText(String(TG_USER.id)).then(() => toast('ID скопирован'), () => toast('ID: ' + TG_USER.id)); } });
+  list.push({ label: 'Экспорт данных (скопировать JSON)', nosave: 1, fn: () => { const d = {}; DATA_KEYS.forEach(k => d[k] = S[k]); navigator.clipboard?.writeText(JSON.stringify(d)).then(() => toast('Скопировано'), () => toast('Не удалось скопировать')); } });
+  list.push({ label: CLOUD ? 'Сбросить к демо-данным (на всех устройствах)' : 'Сбросить к демо-данным', danger: 1, fn: () => { const ui = S.ui; S = seed(); S.ui = ui; toast('Данные сброшены'); } });
+  openActions('Настройки', list, info);
 }
 
 render();
