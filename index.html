@@ -261,6 +261,27 @@ body.locked{position:fixed;left:0;right:0;overflow:hidden}
 .lbh{text-align:center;color:#8291a9;font-size:12px;padding:10px 0 calc(14px + env(safe-area-inset-bottom))}
 img[onclick]{cursor:zoom-in}
 
+/* shopping */
+.sadd{display:flex;gap:8px;margin-bottom:12px}
+.sadd input{flex:1;min-width:0;padding:12px 14px;border-radius:13px;background:var(--card);border:1px solid var(--line);outline:0}
+.sadd input:focus{border-color:var(--accent)}
+.srow{display:flex;align-items:center;gap:10px;padding:9px 0}
+.srow+.srow{border-top:1px solid var(--line)}
+.sck{width:26px;height:26px;flex:none;border-radius:50%;border:2px solid var(--line2);display:grid;place-items:center;color:#06210f}
+.sck svg{width:15px;height:15px;stroke-width:3}
+.srow.sdone .sck{background:var(--green);border-color:var(--green)}
+.srow.sdone .stx b{text-decoration:line-through;color:var(--muted)}
+.stx{text-align:left;min-width:0}
+.stx small{display:block;color:var(--muted);font-size:12px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:14px}
+.sp i{font-style:normal;color:var(--muted2);font-weight:400;font-size:12.5px}
+.thumb.sm{width:40px;height:40px;border-radius:10px;font-size:20px}
+.stot{display:flex;justify-content:space-between;align-items:center}
+.stot span{color:var(--muted);font-size:13.5px}.stot b{font-size:20px;font-variant-numeric:tabular-nums}
+.lnk{display:flex;gap:8px}.lnk input{flex:1;min-width:0}.lnk .ph-btn{flex:none;padding:11px 12px}
+.lnkimg{display:block;width:100%;max-height:180px;object-fit:contain;border-radius:12px;margin-top:10px;background:var(--card)}
+.lnkimg[hidden]{display:none}
+
 /* sync */
 .syncpill{font:inherit;cursor:pointer;position:absolute;left:0;top:20px;z-index:1;font-size:11px;padding:5px 9px;border-radius:20px;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
 .syncpill.ok{color:var(--accent2)}.syncpill.err{color:var(--orange)}
@@ -552,6 +573,7 @@ const MODEL_CATALOG = [
     url: 'https://makerworld.com/models/3088448', img: 'https://makerworld.bblmw.com/makerworld/model/US21e4c7ca1a296b/design/0ec897f227525576.png?x-oss-process=image/resize,w_600/ignore-error,1' },
 ];
 
+const SHOP_DEF = () => ({ food: [], fil: [] });
 const FIN_DEF = () => ({ tx: [], rules: [], rates: { GBP: 430, EUR: 390, USD: 360 } });
 let pairCache = { key: '', set: new Set() };
 const CALC_DEF = () => ({ fil: '', price: 7000, grams: 50, h: 3, m: 0, watt: 150, kwh: 36, wear: 50, fail: 10, extra: 0, markup: 100, cur: 'Ft' });
@@ -590,6 +612,7 @@ function seed() {
     ],
     calc: CALC_DEF(),
     fin: FIN_DEF(),
+    shop: SHOP_DEF(),
     meta: { v: 0 },
     ui: { fridgeTab: 'products', recCat: 'all', recQ: '', printTab: 'fil', weightTab: 'chart', selDate: null },
   };
@@ -605,7 +628,7 @@ const OWNER_ID = 0; // ← впиши сюда свой Telegram ID (видно 
 const LOCKED = !!OWNER_ID && (!TG_USER || TG_USER.id !== OWNER_ID);
 const CLOUD = !LOCKED && !!(TG_USER && tg.CloudStorage && tg.isVersionAtLeast && tg.isVersionAtLeast('6.9'));
 const LKEY = `${STORE}:${TG_USER ? TG_USER.id : 'web'}`;
-const DATA_KEYS = ['products', 'recipes', 'workouts', 'weights', 'filaments', 'models', 'calc', 'fin'];
+const DATA_KEYS = ['products', 'recipes', 'workouts', 'weights', 'filaments', 'models', 'calc', 'fin', 'shop'];
 let canStore = false;
 try { localStorage.setItem('__t', '1'); localStorage.removeItem('__t'); canStore = true; } catch (e) {}
 const lsGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
@@ -618,11 +641,12 @@ if (!S || !S.products) S = seed();
 S.meta = S.meta || { v: 0 };
 S.calc = Object.assign(CALC_DEF(), S.calc || {});
 S.fin = Object.assign(FIN_DEF(), S.fin || {});
+S.shop = Object.assign(SHOP_DEF(), S.shop || {});
 S.ui = Object.assign(seed().ui, S.ui || {});
 S.ui.selDate = today();
 
 const photoSrc = p => !p ? '' : p.startsWith('data:') ? p : (PH[p] || '');
-const pic = (o, fb) => { const s = photoSrc(o.photo); return s ? `<img src="${esc(s)}" alt="" onclick="event.stopPropagation();zoomImg(this)">` : fb; };
+const pic = (o, fb) => { const s = photoSrc(o.photo) || o.img; return s ? `<img src="${esc(s)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()" onclick="event.stopPropagation();zoomImg(this)">` : fb; };
 const allItems = () => [...S.products, ...S.recipes, ...S.filaments, ...S.models];
 const refPhotos = () => new Set(allItems().map(o => o.photo).filter(p => p && !p.startsWith('data:')));
 function normalizePhotos() { allItems().forEach(o => { if (o.photo && o.photo.startsWith('data:')) { const id = 'ph' + uid() + uid(); PH[id] = o.photo; o.photo = id; } }); }
@@ -699,6 +723,7 @@ async function pull() {
     DATA_KEYS.forEach(k => { if (data[k] !== undefined && data[k] !== null) S[k] = data[k]; });
     S.calc = Object.assign(CALC_DEF(), S.calc || {});
     S.fin = Object.assign(FIN_DEF(), S.fin || {}); pairCache.key = '';
+    S.shop = Object.assign(SHOP_DEF(), S.shop || {});
     S.meta.v = cv; saveLocal(); render();
   } else if (cv < lv) return push();
   const need = [...refPhotos()].filter(id => !PH[id] && cloudKeys.has(`p_${id}_n`));
@@ -773,7 +798,7 @@ const SCREENS = {};
 /* ---- Fridge ---- */
 SCREENS.fridge = () => {
   const tab = S.ui.fridgeTab;
-  const seg = `<div class="seg"><button class="${tab === 'products' ? 'on' : ''}" onclick="setUI('fridgeTab','products')">Продукты</button><button class="${tab === 'recipes' ? 'on' : ''}" onclick="setUI('fridgeTab','recipes')">Рецепты</button></div>`;
+  const seg = `<div class="seg"><button class="${tab === 'products' ? 'on' : ''}" onclick="setUI('fridgeTab','products')">Продукты</button><button class="${tab === 'recipes' ? 'on' : ''}" onclick="setUI('fridgeTab','recipes')">Рецепты</button><button class="${tab === 'shop' ? 'on' : ''}" onclick="setUI('fridgeTab','shop')">Покупки${S.shop.food.filter(i => !i.done).length ? ` · ${S.shop.food.filter(i => !i.done).length}` : ''}</button></div>`;
   let body;
   if (tab === 'products') {
     const list = [...S.products].sort((a, b) => a.until < b.until ? -1 : 1);
@@ -782,6 +807,8 @@ SCREENS.fridge = () => {
         const dl = daysLeft(p.until), cls = dl < 0 ? 'bad' : dl <= 2 ? 'warn' : '';
         return `<div class="row"><div class="thumb">${pic(p, esc(p.emoji || '🍽️'))}</div><div class="grow"><b>${esc(p.name)}</b><small>${esc(p.qty)}</small></div><span class="meta ${cls}">${dl < 0 ? 'истёк ' : 'до '}${fmt(p.until)}</span><button class="dots" onclick="productMenu('${p.id}')">${I.dots}</button></div>`;
       }).join('') : `<div class="empty"><div class="e">🧊</div>Холодильник пуст</div>`}</div>`;
+  } else if (tab === 'shop') {
+    body = shopBody('food');
   } else {
     const chips = [['fridge', '🧊 Из холодильника'], ['all', 'Все'], ['mine', '❤︎ Мои'], ['Завтраки', 'Завтраки'], ['Обеды', 'Обеды'], ['Ужины', 'Ужины'], ['Перекусы', 'Перекусы']];
     if (!chips.some(c => c[0] === S.ui.recCat)) S.ui.recCat = 'all';
@@ -789,7 +816,7 @@ SCREENS.fridge = () => {
       <div class="chips">${chips.map(([k, l]) => `<button class="${S.ui.recCat === k ? 'on' : ''}" onclick="setUI('recCat','${k}')">${l}</button>`).join('')}</div>
       <div id="reclist">${recipeList()}</div>`;
   }
-  return { title: 'Холодильник', tab: 'fridge', action: `<button class="ib accent" onclick="${tab === 'products' ? 'productForm()' : 'recipeForm()'}">${I.plus}</button>`, body: seg + body };
+  return { title: 'Холодильник', tab: 'fridge', action: `<button class="ib accent" onclick="${tab === 'products' ? 'productForm()' : tab === 'shop' ? "shopForm('food')" : 'recipeForm()'}">${I.plus}</button>`, body: seg + body };
 };
 /* ---- Рецепты: подбор по холодильнику ---- */
 const nrm = s => String(s || '').toLowerCase().replace(/ё/g, 'е');
@@ -858,7 +885,7 @@ function recipeView(id) {
     <div class="rec" style="padding:0;border:0;background:none;margin:0"><div class="info" style="margin:0 0 6px"><span>${I.clock}${num(r.time)} мин</span><span>${I.chef}${esc(r.level || '')}</span>${r.serv ? `<span>🍽 ${r.serv} порц.</span>` : ''}</div></div>
     <div class="bdgs">${badges(m)}</div>
     <div class="h3">Ингредиенты${m.total ? ` · есть ${m.have} из ${m.total}` : ''}</div>${rows}
-    ${m.miss.length ? `<button class="btn ghost" style="margin-top:12px" onclick="copyMissing('${r.id}')">📋 Скопировать, что докупить (${m.miss.length})</button>` : ''}
+    ${m.miss.length ? `<button class="btn outline" style="margin-top:12px" onclick="addMissingToShop('${r.id}')">🛒 Недостающее — в покупки (${m.miss.length})</button><button class="btn ghost" style="margin-top:8px" onclick="copyMissing('${r.id}')">📋 Скопировать списком</button>` : ''}
     ${steps}
     <div style="display:flex;gap:8px;margin-top:16px">${btns}</div>`);
 }
@@ -993,12 +1020,107 @@ function delWeight(id) { S.weights = S.weights.filter(w => w.id !== id); hap(); 
 /* ---- 3D Print ---- */
 SCREENS.print = () => {
   const tab = S.ui.printTab;
-  const seg = `<div class="seg"><button class="${tab === 'fil' ? 'on' : ''}" onclick="setUI('printTab','fil')">Филаменты</button><button class="${tab === 'mod' ? 'on' : ''}" onclick="setUI('printTab','mod')">Модели</button><button class="${tab === 'calc' ? 'on' : ''}" onclick="setUI('printTab','calc')">Расчёт</button></div>`;
-  const body = tab === 'calc' ? calcBody() : tab === 'fil'
-    ? `<button class="btn outline mb" onclick="filForm()">${I.plus}Добавить филамент</button><div class="list">${S.filaments.map(f => `<div class="row"><div class="spool ${f.photo ? 'ph' : ''}" style="${f.photo ? '' : `background:radial-gradient(circle at 35% 30%,${f.color}ee,${f.color} 45%,#000 120%)`}">${pic(f, '')}</div><div class="grow"><b>${esc(f.name)}</b><small>${esc(f.d)} мм${num(f.price) ? ' · ' + money(num(f.price)) + '/кг' : ''}</small></div><span class="meta ${f.g < 250 ? 'warn' : ''}">${f.g} г</span><button class="dots" onclick="filMenu('${f.id}')">${I.dots}</button></div>`).join('') || '<div class="empty">Нет филаментов</div>'}</div>`
+  const seg = `<div class="seg"><button class="${tab === 'fil' ? 'on' : ''}" onclick="setUI('printTab','fil')">Филаменты</button><button class="${tab === 'mod' ? 'on' : ''}" onclick="setUI('printTab','mod')">Модели</button><button class="${tab === 'calc' ? 'on' : ''}" onclick="setUI('printTab','calc')">Расчёт</button><button class="${tab === 'buy' ? 'on' : ''}" onclick="setUI('printTab','buy')">Купить</button></div>`;
+  const body = tab === 'calc' ? calcBody() : tab === 'buy' ? shopBody('fil') : tab === 'fil'
+    ? `<button class="btn outline mb" onclick="filForm()">${I.plus}Добавить филамент</button><div class="list">${S.filaments.map(f => `<div class="row"><div class="spool ${f.photo || f.img ? 'ph' : ''}" style="${f.photo || f.img ? '' : `background:radial-gradient(circle at 35% 30%,${f.color}ee,${f.color} 45%,#000 120%)`}">${pic(f, '')}</div><div class="grow"><b>${esc(f.name)}</b><small>${esc(f.d)} мм${num(f.price) ? ' · ' + money(num(f.price)) + '/кг' : ''}</small></div><span class="meta ${f.g < 250 ? 'warn' : ''}">${f.g} г</span><button class="dots" onclick="filMenu('${f.id}')">${I.dots}</button></div>`).join('') || '<div class="empty">Нет филаментов</div>'}</div>`
     : modelsBody();
-  return { title: '3D Печать', tab: 'print', action: tab === 'calc' ? '' : `<button class="ib accent" onclick="${tab === 'fil' ? 'filForm()' : 'modelForm()'}">${I.plus}</button>`, body: seg + body };
+  return { title: '3D Печать', tab: 'print', action: tab === 'calc' ? '' : `<button class="ib accent" onclick="${tab === 'fil' ? 'filForm()' : tab === 'buy' ? "shopForm('fil')" : 'modelForm()'}">${I.plus}</button>`, body: seg + body };
 };
+/* ===================== СПИСКИ ПОКУПОК =====================
+   S.shop.food — продукты, S.shop.fil — филаменты.
+   Позиция: { id, name, qty, price, done, link?, img?, kg? }  (price — за позицию / за катушку) */
+const shopTotal = (k, done) => S.shop[k].filter(i => !!i.done === done).reduce((s, i) => s + num(i.price) * (k === 'fil' ? Math.max(1, num(i.qty) || 1) : 1), 0);
+function shopBody(k) {
+  const L = S.shop[k], todo = L.filter(i => !i.done), got = L.filter(i => i.done);
+  const row = i => {
+    const im = photoSrc(i.photo) || i.img;
+    const sub = [k === 'fil' ? (num(i.qty) > 1 ? i.qty + ' кат.' : '') + (i.kg && num(i.kg) !== 1 ? ` · ${i.kg} кг` : '') : esc(i.qty || ''), i.link ? '🔗 ' + esc(hostOf(i.link)) : ''].filter(Boolean).join(' · ');
+    const sum = num(i.price) * (k === 'fil' ? Math.max(1, num(i.qty) || 1) : 1);
+    return `<div class="srow ${i.done ? 'sdone' : ''}">
+      <button class="sck" onclick="shopToggle('${k}','${i.id}')">${i.done ? I.check : ''}</button>
+      ${k === 'fil' || im ? `<div class="thumb sm">${im ? `<img src="${esc(im)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()" onclick="event.stopPropagation();zoomImg(this)">` : '🧵'}</div>` : ''}
+      <button class="grow stx" onclick="shopForm('${k}','${i.id}')"><b>${esc(i.name)}</b>${sub ? `<small>${sub}</small>` : ''}</button>
+      <span class="sp">${sum ? ft(sum) : '<i>цена?</i>'}</span></div>`;
+  };
+  const quick = k === 'food'
+    ? `<div class="sadd"><input id="sq" placeholder="Что купить? (Enter — добавить)" onkeydown="if(event.key==='Enter'){event.preventDefault();shopQuick()}"><button class="ib accent" onclick="shopQuick()">${I.plus}</button></div>`
+    : `<button class="btn outline mb" onclick="shopForm('fil')">${I.plus}Добавить филамент в покупки</button>`;
+  return `${quick}
+    <div class="card mb fops">${todo.map(row).join('') || `<div class="empty" style="padding:20px">${k === 'food' ? 'Список пуст. Добавь сюда или из рецепта — кнопкой «🛒 В покупки»' : 'Вставь ссылку на филамент из магазина — подтяну цену и фото'}</div>`}</div>
+    ${todo.length ? `<div class="card mb stot"><span>К покупке · ${todo.length} поз.</span><b>${ft(shopTotal(k, false))}</b></div>` : ''}
+    ${got.length ? `<div class="fday">В корзине · ${ft(shopTotal(k, true))}</div><div class="card mb fops">${got.map(row).join('')}</div>
+      <button class="btn primary mb" onclick="${k === 'food' ? 'shopToFridge()' : 'shopToShelf()'}">${k === 'food' ? '🧊 Купленное — в холодильник' : '🧵 Купленное — на полку филаментов'}</button>
+      <button class="btn ghost" onclick="shopClear('${k}')">Убрать купленное из списка</button>` : ''}`;
+}
+const hostOf = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return ''; } };
+function shopQuick() {
+  const inp = document.getElementById('sq'), n = inp.value.trim(); if (!n) return;
+  S.shop.food.push({ id: uid(), name: n, qty: '', price: 0, done: false }); save(); render(); hap();
+  setTimeout(() => { const i = document.getElementById('sq'); if (i) i.focus(); }, 30);
+}
+function shopToggle(k, id) { const i = S.shop[k].find(x => x.id === id); i.done = !i.done; hap(i.done ? 'medium' : 'light'); save(); render(); }
+function shopForm(k, id) {
+  const i = id ? S.shop[k].find(x => x.id === id) : null;
+  const fields = k === 'food'
+    ? [{ key: 'name', label: 'Что купить', req: 1 }, { key: 'qty', label: 'Количество', ph: '2 шт / 1 кг' }, { key: 'price', label: 'Цена, Ft', type: 'number', ph: '890' }]
+    : [{ key: 'link', label: 'Ссылка на магазин', type: 'link', mode: 'spool' }, { key: 'name', label: 'Название', req: 1, ph: 'PLA Basic Black' },
+       { key: 'price', label: 'Цена за катушку, Ft', type: 'number' }, { key: 'kg', label: 'Вес катушки, кг', type: 'number', ph: '1' }, { key: 'qty', label: 'Сколько катушек', type: 'number', ph: '1' }];
+  openForm({ title: i ? 'Изменить' : k === 'food' ? 'В список покупок' : 'Филамент в покупки', values: i || (k === 'fil' ? { kg: 1, qty: 1 } : {}), fields,
+    onSave: v => { v.price = num(v.price); if (k === 'fil') { v.kg = num(v.kg) || 1; v.qty = Math.max(1, num(v.qty) || 1); } i ? Object.assign(i, v) : S.shop[k].push({ id: uid(), done: false, ...v }); } });
+  if (i) sheetEl().insertAdjacentHTML('beforeend', `<button class="btn ghost" style="margin-top:8px;color:var(--red)" onclick="S.shop['${k}']=S.shop['${k}'].filter(x=>x.id!=='${i.id}');closeSheet();save();render()">Удалить из списка</button>`);
+}
+function shopClear(k) { S.shop[k] = S.shop[k].filter(i => !i.done); save(); render(); toast('Готово'); }
+function shopToFridge() {
+  const got = S.shop.food.filter(i => i.done);
+  got.forEach(i => S.products.push({ id: uid(), name: i.name, qty: i.qty || '', until: addDays(today(), 7), emoji: '🛒' }));
+  S.shop.food = S.shop.food.filter(i => !i.done); save(); render(); hap('medium');
+  toast(`В холодильник: ${got.length}. Проверь сроки годности`);
+}
+function shopToShelf() {
+  const got = S.shop.fil.filter(i => i.done);
+  got.forEach(i => { const kg = num(i.kg) || 1, n = Math.max(1, num(i.qty) || 1);
+    S.filaments.push({ id: uid(), name: i.name, color: '#8a8f98', d: '1.75', g: Math.round(kg * 1000 * n), price: num(i.price) ? Math.round(num(i.price) / kg) : 0, link: i.link || '', img: i.img || '', photo: i.photo || '' }); });
+  S.shop.fil = S.shop.fil.filter(i => !i.done); save(); render(); hap('medium');
+  toast(`На полку: ${got.length}. Цвет можно поправить в «Изменить»`);
+}
+function addMissingToShop(id) {
+  const m = matchInfo(findRecipe(id)), have = new Set(S.shop.food.filter(i => !i.done).map(i => nrm(i.name)));
+  const add = m.miss.filter(n => !have.has(nrm(n)));
+  add.forEach(n => S.shop.food.push({ id: uid(), name: n, qty: '', price: 0, done: false }));
+  save(); hap('medium'); toast(add.length ? `Добавлено в покупки: ${add.length}` : 'Уже есть в списке');
+}
+
+/* ---- Цена и фото по ссылке ----
+   Браузер не может напрямую читать чужие сайты, поэтому страница загружается
+   через маленький прокси (Cloudflare Worker, код в worker.js). Адрес — META_PROXY. */
+let META_PROXY = ''; // ← сюда адрес воркера, например https://tofa-meta.xxx.workers.dev
+async function linkFetch(btn, mode) {
+  const box = btn.closest('.fl'), url = box.querySelector('input[type=url]').value.trim();
+  if (!/^https?:\/\//.test(url)) return toast('Вставь ссылку, начинающуюся с https://');
+  if (!META_PROXY) return toast('Автоподтягивание ещё не подключено — цену и фото пока впиши вручную');
+  btn.disabled = true; const old = btn.textContent; btn.textContent = '⏳ Ищу…';
+  try {
+    const r = await fetch(META_PROXY + '?url=' + encodeURIComponent(url)), m = await r.json();
+    if (!r.ok || m.error) throw new Error(m.error || r.status);
+    const F = document.getElementById('fform'), set = (n, v) => { const el = F.querySelector(`[name="${n}"]`); if (el && v !== undefined && v !== null && v !== '') el.value = v; };
+    if (m.title && !F.querySelector('[name="name"]').value) set('name', m.title.slice(0, 80));
+    const kg = (() => { const t = (m.title || '') + ' ' + url, a = t.match(/(\d+(?:[.,]\d+)?)\s*kg/i), b = t.match(/\b(250|500|750|1000|2000|3000)\s*g\b/i); return a ? pAmt(a[1]) : b ? +b[1] / 1000 : 0; })();
+    if (kg) set('kg', kg);
+    let note = '';
+    if (m.price) {
+      const cur = (m.currency || 'HUF').toUpperCase(), rate = cur === 'HUF' ? 1 : num(S.fin.rates[cur]) || ({ EUR: 390, USD: 360, GBP: 430 })[cur] || 0;
+      if (rate) {
+        const huf = Math.round(m.price * rate), perKg = Math.round(huf / (kg || num(F.querySelector('[name="kg"]')?.value) || 1));
+        set('price', mode === 'kg' ? perKg : huf);
+        note = cur === 'HUF' ? `Цена: ${ft(huf)}` : `Цена: ${m.price} ${cur} ≈ ${ft(huf)}`;
+      } else note = `Цена ${m.price} ${cur} — курс неизвестен, впиши в Ft`;
+    } else note = 'Цену на странице не нашёл — впиши вручную';
+    if (m.image) { set('img', m.image); const im = document.getElementById('lnkimg'); im.src = m.image; im.hidden = false; }
+    toast(note); hap('medium');
+  } catch (e) { toast('Не удалось открыть страницу магазина — впиши вручную'); }
+  btn.disabled = false; btn.textContent = old;
+}
+
 /* ---- Калькулятор стоимости печати ---- */
 const money = n => (Math.round(n * 100) / 100).toLocaleString('ru', { maximumFractionDigits: S.calc.cur === 'Ft' ? 0 : 2 }) + ' ' + S.calc.cur;
 function calcRes(o) {
@@ -1047,13 +1169,14 @@ function calcDeduct() {
 function filForm(id) {
   const f = id ? S.filaments.find(x => x.id === id) : null;
   openForm({ title: f ? 'Изменить филамент' : 'Новый филамент', values: f || { d: '1.75', g: 1000, color: '#3d9bff' },
-    fields: [{ key: 'photo', type: 'photo' }, { key: 'name', label: 'Название', req: 1, ph: 'PLA Blue' }, { key: 'color', label: 'Цвет', type: 'color' }, { key: 'd', label: 'Диаметр', type: 'select', options: ['1.75', '2.85'] }, { key: 'g', label: 'Остаток, г', type: 'number' }, { key: 'price', label: `Цена за кг (${S.calc.cur})`, type: 'number', ph: '7000' }],
+    fields: [{ key: 'photo', type: 'photo' }, { key: 'link', label: 'Где купил (ссылка)', type: 'link', mode: 'kg' }, { key: 'name', label: 'Название', req: 1, ph: 'PLA Blue' }, { key: 'color', label: 'Цвет', type: 'color' }, { key: 'd', label: 'Диаметр', type: 'select', options: ['1.75', '2.85'] }, { key: 'g', label: 'Остаток, г', type: 'number' }, { key: 'price', label: `Цена за кг (${S.calc.cur})`, type: 'number', ph: '7000' }],
     onSave: v => { v.g = num(v.g); v.price = num(v.price); f ? Object.assign(f, v) : S.filaments.push({ id: uid(), ...v }); } });
 }
 function filMenu(id) {
   const f = S.filaments.find(x => x.id === id);
   openActions(`${f.name} · ${f.g} г`, [
     { label: 'Списать после печати', fn: () => openForm({ title: 'Сколько ушло?', fields: [{ key: 'used', label: 'Граммы', type: 'number', req: 1 }], onSave: v => { f.g = Math.max(0, f.g - num(v.used)); } }), keep: 1 },
+    ...(f.link ? [{ label: '🔗 Открыть магазин', nosave: 1, keep: 1, fn: () => { closeSheet(); openLink(f.link); } }, { label: '🛒 Купить ещё — в список покупок', fn: () => { S.shop.fil.push({ id: uid(), name: f.name, link: f.link, img: f.img || '', price: Math.round(num(f.price)), kg: 1, qty: 1, done: false }); toast('Добавлено в «Купить»'); } }] : []),
     { label: 'Изменить', fn: () => filForm(id), keep: 1 },
     { label: 'Удалить', danger: 1, fn: () => { S.filaments = S.filaments.filter(x => x.id !== id); toast('Удалено'); } }]);
 }
@@ -1402,6 +1525,8 @@ function openForm(o) {
       <div class="ph-btns"><label class="ph-btn">${val ? 'Заменить фото' : 'Добавить фото'}<input type="file" accept="image/*" onchange="pickPhoto(this)"></label>
       <button type="button" class="ph-btn del" onclick="clearPhoto()">Убрать фото</button></div></div>
       <input type="hidden" name="${f.key}" id="phval" value="${esc(val)}"></div>`;
+    if (f.type === 'link') return `<div class="fl"><span>${f.label}</span><div class="lnk"><input name="${f.key}" type="url" inputmode="url" value="${esc(val)}" placeholder="https://… (вставь ссылку)"><button type="button" class="ph-btn" onclick="linkFetch(this,'${f.mode || ''}')">⤓ Подтянуть</button></div>
+      <input type="hidden" name="img" value="${esc(v.img || '')}"><img class="lnkimg" id="lnkimg" src="${esc(v.img || '')}" alt="" referrerpolicy="no-referrer" ${v.img ? '' : 'hidden'} onclick="zoomImg(this)"></div>`;
     if (f.type === 'textarea') return `<label class="fl"><span>${f.label}</span><textarea name="${f.key}" rows="5" placeholder="${f.ph || ''}">${esc(val)}</textarea></label>`;
     if (f.type === 'select') return `<label class="fl"><span>${f.label}</span><select name="${f.key}">${f.options.map(x => `<option ${x == val ? 'selected' : ''}>${x}</option>`).join('')}</select></label>`;
     return `<label class="fl"><span>${f.label}</span><input name="${f.key}" type="${f.type || 'text'}" ${f.type === 'number' ? 'step="any" inputmode="decimal"' : ''} value="${esc(val)}" placeholder="${f.ph || ''}" ${f.req ? 'required' : ''}></label>`;
