@@ -183,17 +183,6 @@ svg{display:block}
 .dl{width:34px;height:34px;display:grid;place-items:center;color:var(--accent2)}
 .dl svg{width:20px;height:20px}
 
-/* shop */
-.shop-hero{position:relative;overflow:hidden;border-radius:20px;padding:30px 18px;background:radial-gradient(90% 90% at 80% 40%,#1a2a44,#0a1322 70%);border:1px solid var(--line2);min-height:220px}
-.shop-hero .dragon{position:absolute;right:-10px;bottom:-14px;font-size:150px;opacity:.9;filter:grayscale(1) brightness(.55) drop-shadow(0 0 30px rgba(61,155,255,.3))}
-.shop-hero .cube{color:var(--accent2);filter:drop-shadow(0 0 12px var(--glow))}
-.shop-hero .cube svg{width:58px;height:58px}
-.shop-hero h3{position:relative;font-size:30px;font-weight:800;letter-spacing:1px;margin-top:12px}
-.shop-hero h4{position:relative;font-size:14px;letter-spacing:7px;font-weight:500;color:#c8d6ea}
-.shop-hero p{position:relative;font-size:10.5px;color:var(--muted);margin-top:12px;letter-spacing:.5px}
-.feats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;padding:18px 6px}
-.feats div{color:#cfd9e8;font-size:12px;line-height:1.35}
-.feats svg{width:30px;height:30px;margin:0 auto 8px;color:var(--accent2)}
 
 /* sheet */
 body.locked{position:fixed;left:0;right:0;overflow:hidden}
@@ -236,10 +225,6 @@ body.locked{position:fixed;left:0;right:0;overflow:hidden}
 .hint{color:var(--muted2);font-size:12px;line-height:1.5;margin-top:4px}
 
 /* finance */
-.tile.wide{grid-column:1/-1;aspect-ratio:auto;flex-direction:row;justify-content:flex-start;gap:14px;padding:16px;text-align:left}
-.tile.wide .ic{flex:none}.tile.wide .ic svg{width:40px;height:40px}
-.tile.wide .grow small{display:block}
-.tile.wide>svg{width:18px;height:18px;color:var(--muted);flex:none}
 .fin-hero{text-align:center;padding:18px 14px}
 .fin-hero small{color:var(--muted);font-size:12.5px}
 .fin-hero b{display:block;font-size:32px;font-weight:800;margin:4px 0;font-variant-numeric:tabular-nums}
@@ -293,7 +278,6 @@ body.locked{position:fixed;left:0;right:0;overflow:hidden}
 
 <script>
 /* ===================== CONFIG ===================== */
-const SHOP_URL = 'https://example.com'; // ← ссылка на магазин TOFA3D Studio
 const STORE = 'tofa-hub-v1';
 
 /* ===================== TELEGRAM ===================== */
@@ -717,7 +701,7 @@ function go(name, p = {}) { hap(); stack.push({ name, p }); render(); window.scr
 function back() { hap(); if (stack.length > 1) stack.pop(); render(); window.scrollTo(0, 0); }
 function navTo(name) { hap(); stack = name === 'home' ? [{ name: 'home' }] : [{ name: 'home' }, { name }]; render(); window.scrollTo(0, 0); }
 
-const NAV = [['home', 'Главная', I.home], ['fridge', 'Холодильник', I.fridge], ['workouts', 'Тренировки', I.dumbbell], ['print', '3D Печать', I.printer], ['shop', 'Магазин', I.cart]];
+const NAV = [['home', 'Главная', I.home], ['fridge', 'Холодильник', I.fridge], ['workouts', 'Тренировки', I.dumbbell], ['print', '3D Печать', I.printer], ['finance', 'Финансы', I.wallet]];
 const nav = tab => `<nav class="nav">${NAV.map(([k, l, ic]) => `<button class="${k === tab ? 'on' : ''}" onclick="navTo('${k}')">${ic}<span>${l}</span></button>`).join('')}</nav>`;
 
 function render() {
@@ -733,10 +717,10 @@ function render() {
 }
 
 /* ===================== HOME ===================== */
-function finTile() {
-  let sub = 'Траты по выпискам банков';
-  if (S.fin.tx.length) { const ym = S.fin.tx[0].d.slice(0, 7), d = finMonthData(ym); sub = `${MONTHS[+ym.slice(5) - 1]}: потрачено ${ft(d.spent)}`; }
-  return `<button class="tile wide" onclick="go('finance')"><div class="ic">${I.wallet}</div><span class="grow"><b>Финансы</b><small>${sub}</small></span>${I.next}</button>`;
+function finTile(tile) {
+  let sub = 'Траты по выпискам', badge = '';
+  if (S.fin.tx.length) { const ym = S.fin.tx[0].d.slice(0, 7), d = finMonthData(ym); sub = 'Траты и выписки'; badge = `<span class="badge ok">${MONTHS[+ym.slice(5) - 1].slice(0, 3).toLowerCase()}: ${Math.round(d.spent / 1000)}k Ft</span>`; }
+  return tile('finance', I.wallet, 'Финансы', sub, badge);
 }
 function Home() {
   const soon = S.products.filter(p => daysLeft(p.until) <= 2).length;
@@ -753,8 +737,7 @@ function Home() {
       ${tile('fridge', I.fridge, 'Холодильник', 'Рецепты и продукты', soon ? `<span class="badge">${soon} истекает</span>` : '')}
       ${tile('workouts', I.dumbbell, 'Тренировки', 'План, календарь, вес', tw ? `<span class="badge ok">${tw.done ? '✓ Сегодня' : 'Сегодня'}</span>` : '')}
       ${tile('print', I.printer, '3D Печать', 'Филаменты и модели', low ? `<span class="badge">${low} мало</span>` : '')}
-      ${tile('shop', I.cart, 'Магазин', 'TOFA3D Studio')}
-      ${finTile()}
+      ${finTile(tile)}
     </div>
     <p class="quote">Маленькие шаги<br>делают большие результаты<br>— TOFA</p>
   </div>`;
@@ -1270,7 +1253,7 @@ function finMonthData(ym) {
 SCREENS.finance = () => {
   const action = `<button class="ib accent" onclick="document.getElementById('finfile').click()">${I.plus}</button>`;
   const inputEl = `<input type="file" id="finfile" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" onchange="finFile(this)">`;
-  if (!S.fin.tx.length) return { title: 'Финансы', tab: '', action, body: inputEl + `<div class="card empty" style="padding:28px 16px"><div class="e">💳</div><b style="color:var(--text);font-size:16px">Загрузи выписку из банка</b>
+  if (!S.fin.tx.length) return { title: 'Финансы', tab: 'finance', action, body: inputEl + `<div class="card empty" style="padding:28px 16px"><div class="e">💳</div><b style="color:var(--text);font-size:16px">Загрузи выписку из банка</b>
     <p style="margin:10px 0 16px;line-height:1.5">Revolut → счёт → … → <b>Выписка</b> → формат <b>CSV</b>.<br>Приложение само разложит траты по категориям и уберёт переводы между твоими счетами.</p>
     <button class="btn primary" onclick="document.getElementById('finfile').click()">Выбрать файл</button>
     <p class="hint" style="margin-top:12px">🔒 Файл обрабатывается на телефоне и никуда не отправляется.</p></div>` };
@@ -1302,7 +1285,7 @@ SCREENS.finance = () => {
           <span class="grow"><b>${esc(t.s)}</b><small>${k.kind === 'int' ? 'не учитывается' + (k.check ? ' · проверь' : '') : k.kind === 'debt' ? 'долг · не в расходах' : FCATS[k.cat][1]} · ${BANKS[t.b] || t.b} · ${t.d.slice(11, 16)}</small></span>
           <span class="famt ${v > 0 ? 'pos' : ''}">${v > 0 ? '+' : ''}${ft(v)}${t.c !== 'HUF' ? `<small>${t.a > 0 ? '+' : '−'}${Math.abs(t.a).toFixed(2)} ${t.c}</small>` : ''}</span></button>`).join('')}</div>`).join('') || '<div class="empty">Нет операций</div>'}`;
   }
-  return { title: 'Финансы', tab: '', action, body: inputEl + head + seg + body + `<button class="btn ghost" style="margin-top:16px" onclick="finSettings()">⚙️ Курсы, правила, данные</button>` };
+  return { title: 'Финансы', tab: 'finance', action, body: inputEl + head + seg + body + `<button class="btn ghost" style="margin-top:16px" onclick="finSettings()">⚙️ Курсы, правила, данные</button>` };
 };
 function finOp(id) {
   const t = S.fin.tx.find(x => x.id === id); if (!t) return;
@@ -1347,12 +1330,7 @@ function finSaveRates() { document.querySelectorAll('#fform input[name]').forEac
 let wipeArm = 0;
 function finWipe() { if (Date.now() - wipeArm > 4000) { wipeArm = Date.now(); return toast('Нажми ещё раз, чтобы удалить'); } S.fin = FIN_DEF(); pairCache.key = ''; closeSheet(); save(); render(); toast('Финансовые данные удалены'); }
 
-/* ---- Shop ---- */
-SCREENS.shop = () => ({ title: 'Магазин', tab: 'shop', action: `<button class="ib" onclick="openLink(SHOP_URL)">${I.ext}</button>`, body: `
-  <div class="shop-hero"><div class="dragon">🐉</div><div class="cube">${I.cube}</div><h3>TOFA3D</h3><h4>STUDIO</h4><p>3D ПЕЧАТЬ • МОДЕЛИ • АКСЕССУАРЫ</p></div>
-  <div class="card" style="margin-top:14px"><div class="feats"><div>${I.cube}Качественная<br>3D печать</div><div>${I.star}Уникальные<br>модели</div><div>${I.truck}Быстрая<br>доставка</div></div>
-  <button class="btn primary" onclick="openLink(SHOP_URL)">Перейти в магазин ${I.ext}</button>
-  <button class="btn outline" style="margin-top:10px" onclick="S.ui.printTab='calc';navTo('print')">🧮 Калькулятор стоимости печати</button></div>` });
+
 
 /* ===================== SHEETS ===================== */
 const sheetEl = () => document.getElementById('sheet');
