@@ -196,8 +196,9 @@ svg{display:block}
 .feats svg{width:30px;height:30px;margin:0 auto 8px;color:var(--accent2)}
 
 /* sheet */
-.ov{position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .2s}
-.sheet{position:fixed;left:50%;bottom:0;z-index:41;width:100%;max-width:480px;max-height:88vh;overflow:auto;transform:translate(-50%,105%);transition:transform .25s cubic-bezier(.2,.8,.2,1);background:var(--bg2);border:1px solid var(--line2);border-bottom:0;border-radius:22px 22px 0 0;padding:10px 18px calc(22px + env(safe-area-inset-bottom))}
+body.locked{position:fixed;left:0;right:0;overflow:hidden}
+.ov{touch-action:none;position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .2s}
+.sheet{position:fixed;left:50%;bottom:0;z-index:41;width:100%;max-width:480px;max-height:88vh;overflow:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;transform:translate(-50%,105%);transition:transform .25s cubic-bezier(.2,.8,.2,1);background:var(--bg2);border:1px solid var(--line2);border-bottom:0;border-radius:22px 22px 0 0;padding:10px 18px calc(22px + env(safe-area-inset-bottom))}
 .show .ov{opacity:1;pointer-events:auto}
 .show .sheet{transform:translate(-50%,0)}
 .grab{width:40px;height:4px;border-radius:4px;background:var(--line2);margin:0 auto 14px}
@@ -1065,8 +1066,21 @@ SCREENS.shop = () => ({ title: 'Магазин', tab: 'shop', action: `<button c
 
 /* ===================== SHEETS ===================== */
 const sheetEl = () => document.getElementById('sheet');
-function openSheet(html) { sheetEl().innerHTML = '<div class="grab"></div>' + html; document.getElementById('sheetwrap').classList.add('show'); }
-function closeSheet() { document.getElementById('sheetwrap').classList.remove('show'); }
+// Пока открыто окно, страница под ним заморожена (иначе она прокручивается вместе с окном)
+let lockY = 0;
+function lockScroll() {
+  const b = document.body; if (b.classList.contains('locked')) return;
+  lockY = window.scrollY; b.style.top = -lockY + 'px'; b.classList.add('locked');
+  try { tg.disableVerticalSwipes(); } catch (e) {} // свайп вниз не сворачивает мини-апп
+}
+function unlockScroll() {
+  const b = document.body; if (!b.classList.contains('locked')) return;
+  b.classList.remove('locked'); b.style.top = ''; window.scrollTo(0, lockY);
+  try { tg.enableVerticalSwipes(); } catch (e) {}
+}
+function openSheet(html) { const sh = sheetEl(); sh.innerHTML = '<div class="grab"></div>' + html; sh.scrollTop = 0; lockScroll(); document.getElementById('sheetwrap').classList.add('show'); }
+function closeSheet() { const w = document.getElementById('sheetwrap'); if (!w.classList.contains('show')) return; w.classList.remove('show'); unlockScroll(); }
+document.addEventListener('touchmove', e => { if (document.body.classList.contains('locked') && !e.target.closest('#sheet')) e.preventDefault(); }, { passive: false });
 let formCb = null;
 function openForm(o) {
   formCb = o.onSave; const v = o.values || {};
