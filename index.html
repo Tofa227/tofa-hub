@@ -262,7 +262,7 @@ body.locked{position:fixed;left:0;right:0;overflow:hidden}
 img[onclick]{cursor:zoom-in}
 
 /* sync */
-.syncpill{position:absolute;left:0;top:20px;z-index:1;font-size:11px;padding:5px 9px;border-radius:20px;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.syncpill{font:inherit;cursor:pointer;position:absolute;left:0;top:20px;z-index:1;font-size:11px;padding:5px 9px;border-radius:20px;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
 .syncpill.ok{color:var(--accent2)}.syncpill.err{color:var(--orange)}
 .setinfo{font-size:13.5px;line-height:1.7}.setinfo .muted{color:var(--muted)}
 
@@ -638,23 +638,36 @@ const cs = (m, ...a) => new Promise((res, rej) => {
   const t = setTimeout(() => rej(new Error('timeout')), 15000);
   try { tg.CloudStorage[m](...a, (e, v) => { clearTimeout(t); e ? rej(e) : res(v); }); } catch (e) { clearTimeout(t); rej(e); }
 });
-const CHUNK = 4000;
-const split = s => { const o = []; for (let i = 0; i < s.length; i += CHUNK) o.push(s.slice(i, i + CHUNK)); return o.length ? o : ['']; };
+// Лимит Telegram — 4096 на значение. Русский текст в UTF-8 весит до 3 байт на символ,
+// поэтому данные режем по 1300 символов, а фото (base64, только латиница) — по 4000.
+const CHUNK = 4000, TCHUNK = 1300;
+const split = (s, n = CHUNK) => { const o = []; for (let i = 0; i < s.length; i += n) o.push(s.slice(i, i + n)); return o.length ? o : ['']; };
+let lastErr = '', retryN = 0, retryT = null;
 async function getMany(keys) { const o = {}; for (let i = 0; i < keys.length; i += 20) Object.assign(o, await cs('getItems', keys.slice(i, i + 20))); return o; }
 async function removeMany(keys) { for (let i = 0; i < keys.length; i += 20) { const b = keys.slice(i, i + 20); await cs('removeItems', b); b.forEach(k => cloudKeys.delete(k)); } }
 async function put(k, v) { await cs('setItem', k, v); cloudKeys.add(k); }
 function syncPill() {
   const m = { local: ['📱', 'Только это устройство'], sync: ['⏳', 'Синхронизация…'], ok: ['☁️', 'Синхронизировано'], err: ['⚠️', 'Нет связи с облаком'] }[syncState];
-  return `<span class="syncpill ${syncState}" id="syncpill">${m[0]} ${m[1]}</span>`;
+  return `<button class="syncpill ${syncState}" id="syncpill" onclick="syncInfo()">${m[0]} ${m[1]}</button>`;
 }
-function setSync(st) { syncState = st; if (st === 'ok') lastSync = Date.now(); const el = document.getElementById('syncpill'); if (el) el.outerHTML = syncPill(); }
-const queue = fn => (chain = chain.then(fn).catch(e => { console.warn('sync', e); setSync('err'); }));
+function setSync(st) { syncState = st; if (st === 'ok') { lastSync = Date.now(); lastErr = ''; retryN = 0; } const el = document.getElementById('syncpill'); if (el) el.outerHTML = syncPill(); }
+const queue = fn => (chain = chain.then(fn).catch(e => {
+  console.warn('sync', e); lastErr = String((e && (e.message || e)) || 'unknown'); setSync('err');
+  // повтор с паузой: 10 с, 30 с, 90 с…
+  if (CLOUD && retryN < 5) { clearTimeout(retryT); retryT = setTimeout(() => queue(pull), 10000 * Math.pow(3, retryN++)); }
+}));
+function syncInfo() {
+  const t = lastSync ? new Date(lastSync).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' }) : '—';
+  const st = { local: 'Облако недоступно — данные только на этом устройстве (открой приложение из Telegram).', sync: 'Идёт синхронизация…', ok: 'Всё синхронизировано.', err: 'Не удалось связаться с облаком Telegram. Данные на телефоне в порядке, синхронизация повторится сама.' }[syncState];
+  openActions('Синхронизация', CLOUD ? [{ label: 'Повторить сейчас', nosave: 1, fn: () => { retryN = 0; flushPush(); queue(pull); } }] : [],
+    `<div class="card mb setinfo"><div>${st}</div><div class="muted">Последняя удачная: ${t} · ячеек в облаке: ${cloudKeys.size} из 1024</div>${lastErr ? `<div class="muted" style="margin-top:6px">Ошибка: <code>${esc(lastErr)}</code></div>` : ''}</div>`);
+}
 function schedulePush() { if (!CLOUD) return; dirty = true; setSync('sync'); clearTimeout(pushTimer); pushTimer = setTimeout(() => { pushTimer = null; queue(push); }, 700); }
 
 async function push() {
   dirty = false;
   const data = {}; DATA_KEYS.forEach(k => data[k] = S[k]);
-  const parts = split(JSON.stringify(data));
+  const parts = split(JSON.stringify(data), TCHUNK);
   for (let i = 0; i < parts.length; i++) await put('d_' + i, parts[i]);
   await put('d_meta', JSON.stringify({ n: parts.length, v: S.meta.v }));
   await removeMany([...cloudKeys].filter(k => /^d_\d+$/.test(k) && +k.slice(2) >= parts.length));
