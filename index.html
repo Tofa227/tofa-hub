@@ -1107,7 +1107,7 @@ function openModel(id) { const m = findModel(id), l = m && (m.link || m.url); if
 const FCATS = {
   food: ['🛒', 'Продукты'], delivery: ['🍔', 'Доставка еды'], cafe: ['🥤', 'Кафе и снеки'], transport: ['🚆', 'Транспорт'], fuel: ['⛽', 'Топливо'],
   ai: ['🤖', 'ИИ и софт'], print: ['🖨️', '3D печать'], fun: ['🎮', 'Подписки и игры'], net: ['🌐', 'Интернет и связь'], home: ['🏠', 'Жильё и счета'],
-  health: ['💊', 'Здоровье'], tobacco: ['🚬', 'Табак'], shop: ['🛍️', 'Покупки'], people: ['↔️', 'Переводы'], debt: ['🤝', 'Долги и займы'], income: ['💰', 'Доходы'], other: ['📦', 'Прочее'],
+  health: ['💊', 'Здоровье'], tobacco: ['🚬', 'Табак и вейпы'], shop: ['🛍️', 'Покупки'], people: ['↔️', 'Переводы'], debt: ['🤝', 'Долги и займы'], income: ['💰', 'Доходы'], other: ['📦', 'Прочее'],
 };
 // Встроенные правила: слово/фраза в описании → категория (порядок важен)
 const FRULES = [
@@ -1122,7 +1122,7 @@ const FRULES = [
   ['net', 'hajduk bela,telekom,yettel,vodafone,digi,one hungary,upc'],
   ['home', 'eon,e on,mvm,nkm,fotav,vizmu,kozos koltseg'],
   ['health', 'vitafamily,gyogyszertar,patika,benu,pharma'],
-  ['tobacco', 'dohanybolt,nemzeti dohanybolt'],
+  ['tobacco', 'dohanybolt,nemzeti dohanybolt,clenai,ou clenai,vape,vapeshop'],
   ['shop', 'niceshops,webshop,h&l,aliexpress,temu,amazon,emag,ikea,decathlon,jysk,pepco,dm,rossmann,plazacopy,arukereso'],
 ].map(([c, ks]) => [c, ks.split(',')]);
 
