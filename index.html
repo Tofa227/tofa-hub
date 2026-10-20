@@ -251,6 +251,16 @@ body.locked{position:fixed;left:0;right:0;overflow:hidden}
 .frem{display:flex;align-items:center;gap:10px;font-size:14px;margin:4px 0 14px;color:var(--muted)}
 .frem input{width:18px;height:18px;accent-color:var(--accent)}
 
+/* lightbox */
+#lb{position:fixed;inset:0;z-index:70;background:rgba(0,0,0,.94);display:none;flex-direction:column}
+#lb.show{display:flex}
+.lbin{flex:1;overflow:auto;display:flex;overscroll-behavior:contain;touch-action:pan-x pan-y}
+.lbin img{flex:none;width:100%;height:100%;object-fit:contain;display:block;margin:auto}
+.lbin img.z{width:220%;height:auto;max-width:none;object-fit:initial}
+.lbx{position:absolute;top:calc(12px + env(safe-area-inset-top));right:12px;z-index:1;width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;font-size:18px}
+.lbh{text-align:center;color:#8291a9;font-size:12px;padding:10px 0 calc(14px + env(safe-area-inset-bottom))}
+img[onclick]{cursor:zoom-in}
+
 /* sync */
 .syncpill{position:absolute;left:0;top:20px;z-index:1;font-size:11px;padding:5px 9px;border-radius:20px;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
 .syncpill.ok{color:var(--accent2)}.syncpill.err{color:var(--orange)}
@@ -275,6 +285,7 @@ body.locked{position:fixed;left:0;right:0;overflow:hidden}
 <div id="app"></div>
 <div id="sheetwrap"><div class="ov" onclick="closeSheet()"></div><div class="sheet" id="sheet"></div></div>
 <div class="toast" id="toast"></div>
+<div id="lb" onclick="if(event.target===this)zoomClose()"><button class="lbx" onclick="zoomClose()">✕</button><div class="lbin" id="lbin"></div><p class="lbh">Двойное нажатие — приблизить</p></div>
 
 <script>
 /* ===================== CONFIG ===================== */
@@ -283,7 +294,7 @@ const STORE = 'tofa-hub-v1';
 /* ===================== TELEGRAM ===================== */
 const tg = window.Telegram && window.Telegram.WebApp;
 if (tg && tg.initData !== undefined) {
-  try { tg.ready(); tg.expand(); tg.setHeaderColor('#050a13'); tg.setBackgroundColor('#050a13'); tg.BackButton.onClick(() => back()); } catch (e) {}
+  try { tg.ready(); tg.expand(); tg.setHeaderColor('#050a13'); tg.setBackgroundColor('#050a13'); tg.BackButton.onClick(() => { if (lbOpen()) return zoomClose(); if (document.getElementById('sheetwrap').classList.contains('show')) return closeSheet(); back(); }); } catch (e) {}
 }
 const hap = (t = 'light') => { try { tg.HapticFeedback.impactOccurred(t); } catch (e) {} };
 const userName = (() => { try { return tg.initDataUnsafe.user.first_name || 'Бро'; } catch (e) { return 'Бро'; } })();
@@ -611,7 +622,7 @@ S.ui = Object.assign(seed().ui, S.ui || {});
 S.ui.selDate = today();
 
 const photoSrc = p => !p ? '' : p.startsWith('data:') ? p : (PH[p] || '');
-const pic = (o, fb) => { const s = photoSrc(o.photo); return s ? `<img src="${esc(s)}" alt="">` : fb; };
+const pic = (o, fb) => { const s = photoSrc(o.photo); return s ? `<img src="${esc(s)}" alt="" onclick="event.stopPropagation();zoomImg(this)">` : fb; };
 const allItems = () => [...S.products, ...S.recipes, ...S.filaments, ...S.models];
 const refPhotos = () => new Set(allItems().map(o => o.photo).filter(p => p && !p.startsWith('data:')));
 function normalizePhotos() { allItems().forEach(o => { if (o.photo && o.photo.startsWith('data:')) { const id = 'ph' + uid() + uid(); PH[id] = o.photo; o.photo = id; } }); }
@@ -830,7 +841,7 @@ function recipeView(id) {
   const btns = mine
     ? `<button class="btn ghost" onclick="closeSheet();recipeForm('${r.id}')">Изменить</button>${r.from ? `<button class="btn ghost" onclick="closeSheet();toggleSaved('${r.id}')">Убрать из моих</button>` : `<button class="btn ghost" style="color:var(--red)" onclick="delItem('recipes','${r.id}')">Удалить</button>`}`
     : `<button class="btn primary" onclick="closeSheet();toggleSaved('${r.id}')">❤︎ В мои рецепты</button>`;
-  openSheet(`${src ? `<img class="hero-img" src="${esc(src)}" alt="">` : `<div class="rv-emoji">${esc(r.emoji || '🍽️')}</div>`}<h3>${esc(r.name)}</h3>
+  openSheet(`${src ? `<img class="hero-img" src="${esc(src)}" alt="" onclick="event.stopPropagation();zoomImg(this)">` : `<div class="rv-emoji">${esc(r.emoji || '🍽️')}</div>`}<h3>${esc(r.name)}</h3>
     <div class="rec" style="padding:0;border:0;background:none;margin:0"><div class="info" style="margin:0 0 6px"><span>${I.clock}${num(r.time)} мин</span><span>${I.chef}${esc(r.level || '')}</span>${r.serv ? `<span>🍽 ${r.serv} порц.</span>` : ''}</div></div>
     <div class="bdgs">${badges(m)}</div>
     <div class="h3">Ингредиенты${m.total ? ` · есть ${m.have} из ${m.total}` : ''}</div>${rows}
@@ -985,14 +996,14 @@ function calcRes(o) {
   const extra = num(c.extra);                            // постобработка, упаковка
   const fail = (mat + el + wear) * num(c.fail) / 100;    // запас на брак
   const cost = mat + el + wear + extra + fail;
-  const profit = cost * num(c.markup) / 100;
+  const profit = mat * num(c.markup) / 100;              // наценка только на стоимость пластика
   return { mat, el, wear, extra, fail, cost, profit, price: cost + profit };
 }
 function calcResHtml(o) {
   const r = calcRes(o), c = S.calc, g = num((o || c).grams), line = (l, v) => `<div class="cl"><span>${l}</span><span>${money(v)}</span></div>`;
   return `${line('Пластик', r.mat)}${line('Электричество', r.el)}${line('Износ принтера', r.wear)}${r.extra ? line('Доп. расходы', r.extra) : ''}${num(c.fail) ? line(`Запас на брак ${num(c.fail)}%`, r.fail) : ''}
     <div class="cl tot"><span>Себестоимость</span><span>${money(r.cost)}</span></div>
-    ${num(c.markup) ? line(`Наценка ${num(c.markup)}%`, r.profit) : ''}
+    ${num(c.markup) ? line(`Наценка ${num(c.markup)}% на пластик`, r.profit) : ''}
     <div class="price"><small>${num(c.markup) ? 'Цена для клиента' : 'Итого'}</small><b>${money(r.price)}</b><small>${g ? money(r.price / g) + ' за грамм' : ''}</small></div>`;
 }
 function calcBody() {
@@ -1005,7 +1016,7 @@ function calcBody() {
   <div class="card mb" id="calcres">${calcResHtml()}</div>
   ${fil ? `<button class="btn outline mb" id="dedbtn" onclick="calcDeduct()">Напечатал — списать ${num(c.grams)} г с «${esc(fil.name)}»</button>` : ''}
   <details class="card mb cset"><summary>Параметры принтера и цены</summary>
-    <div class="cgrid">${inp('watt', 'Мощность принтера', 'Вт', 'numeric')}${inp('kwh', 'Электричество', c.cur + '/кВт·ч')}${inp('wear', 'Износ принтера', c.cur + '/ч')}${inp('fail', 'Запас на брак', '%', 'numeric')}${inp('extra', 'Доп. расходы', c.cur)}${inp('markup', 'Наценка', '%', 'numeric')}</div>
+    <div class="cgrid">${inp('watt', 'Мощность принтера', 'Вт', 'numeric')}${inp('kwh', 'Электричество', c.cur + '/кВт·ч')}${inp('wear', 'Износ принтера', c.cur + '/ч')}${inp('fail', 'Запас на брак', '%', 'numeric')}${inp('extra', 'Доп. расходы', c.cur)}${inp('markup', 'Наценка на пластик', '%', 'numeric')}</div>
     <label class="cf"><span>Валюта</span><select class="inp" onchange="S.calc.cur=this.value;save();render()">${['Ft', '€', '$', '₴', 'zł'].map(x => `<option ${x === c.cur ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
     <p class="hint">Мощность — средняя за печать (обычно 100–200 Вт, со столом на ABS больше). Электричество — посмотри в своём счёте. Износ — сопла, ремни, стол и сам принтер: примерно цена принтера ÷ 5000 часов. Параметры сохраняются и синхронизируются.</p>
   </details>`;
@@ -1037,7 +1048,7 @@ const fmtTime = (h, m) => { h = num(h); m = num(m); return [h ? h + ' ч' : '', 
 function costChip(o) { return num(o.grams) ? `<span class="chip">⚖ ${num(o.grams)} г${num(o.h) || num(o.m) ? ' · ⏱ ' + fmtTime(o.h, o.m) : ''}</span><span class="cost">≈ ${money(calcRes(o).price)}</span>` : ''; }
 function mThumb(m) {
   const s = photoSrc(m.photo); if (s) return `<img src="${esc(s)}" alt="">`;
-  return `<span>${esc(m.emoji || '🧩')}</span>${m.img ? `<img class="ext" src="${esc(m.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}`;
+  return `<span>${esc(m.emoji || '🧩')}</span>${m.img ? `<img class="ext" src="${esc(m.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" onclick="event.stopPropagation();zoomImg(this)">` : ''}`;
 }
 function modelsBody() {
   const row = (m, mine) => `<div class="row tap" onclick="modelView('${m.id}')"><div class="thumb">${mThumb(m)}</div><div class="grow"><b>${esc(m.name)}</b>${(mine ? m.tag : m.cat) ? `<span class="chip">${esc(mine ? m.tag : m.cat)}</span> ` : ''}${costChip(m)}</div>${mine
@@ -1047,13 +1058,13 @@ function modelsBody() {
   return `<button class="btn outline mb" onclick="modelForm()">${I.plus}Добавить модель</button>
     <div class="list">${S.models.map(m => row(m, true)).join('') || '<div class="empty">Нет моделей</div>'}</div>
     ${cat.length ? `<div class="h3">Каталог MakerWorld · ${cat.length}</div><div class="list">${cat.map(m => row(m, false)).join('')}</div>
-      <p class="hint">Цена — по настройкам калькулятора: пластик ${money(num(S.calc.price))}/кг, наценка ${num(S.calc.markup)}%.</p>` : ''}`;
+      <p class="hint">Цена — по настройкам калькулятора: пластик ${money(num(S.calc.price))}/кг, наценка ${num(S.calc.markup)}% на пластик.</p>` : ''}`;
 }
 const findModel = id => S.models.find(x => x.id === id) || MODEL_CATALOG.find(x => x.id === id);
 function modelView(id) {
   const m = findModel(id); if (!m) return;
   const mine = S.models.includes(m), src = photoSrc(m.photo) || m.img || '', link = m.link || m.url;
-  openSheet(`${src ? `<img class="hero-img" src="${esc(src)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : `<div class="rv-emoji">${esc(m.emoji || '🧩')}</div>`}
+  openSheet(`${src ? `<img class="hero-img" src="${esc(src)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()" onclick="event.stopPropagation();zoomImg(this)">` : `<div class="rv-emoji">${esc(m.emoji || '🧩')}</div>`}
     <h3>${esc(m.name)}</h3>
     ${m.author || m.profile ? `<p class="hint" style="margin:-8px 0 12px">${m.author ? 'Автор: ' + esc(m.author) : ''}${m.author && m.profile ? ' · ' : ''}${m.profile ? 'профиль: ' + esc(m.profile) : ''}</p>` : ''}
     ${num(m.grams) ? `<div class="cl"><span>Вес / время печати</span><span>${num(m.grams)} г · ${fmtTime(m.h, m.m)}</span></div><div class="card mb" style="margin-top:8px">${calcResHtml(m)}</div>` : '<p class="hint mb">Укажи вес и время печати — посчитаю стоимость.</p>'}
@@ -1346,6 +1357,24 @@ function unlockScroll() {
   b.classList.remove('locked'); b.style.top = ''; window.scrollTo(0, lockY);
   try { tg.enableVerticalSwipes(); } catch (e) {}
 }
+// Просмотр фото на весь экран
+const lbOpen = () => document.getElementById('lb').classList.contains('show');
+let lbLocked = false, lbTap = 0;
+function zoomImg(el) {
+  const box = document.getElementById('lbin');
+  box.innerHTML = `<img src="${esc(el.currentSrc || el.src)}" alt="" referrerpolicy="no-referrer">`;
+  const im = box.firstChild;
+  im.onclick = e => { e.stopPropagation(); const n = Date.now(); if (n - lbTap < 320) { im.classList.toggle('z'); if (im.classList.contains('z')) { const r = box.getBoundingClientRect(); box.scrollLeft = (box.scrollWidth - r.width) / 2; box.scrollTop = (box.scrollHeight - r.height) / 2; } } lbTap = n; };
+  lbLocked = !document.body.classList.contains('locked'); if (lbLocked) lockScroll();
+  document.getElementById('lb').classList.add('show'); hap();
+  try { tg.BackButton.show(); } catch (e) {}
+}
+function zoomClose() {
+  document.getElementById('lb').classList.remove('show');
+  if (lbLocked && !document.getElementById('sheetwrap').classList.contains('show')) unlockScroll();
+  lbLocked = false;
+  try { stack.length > 1 ? tg.BackButton.show() : tg.BackButton.hide(); } catch (e) {}
+}
 function openSheet(html) { const sh = sheetEl(); sh.innerHTML = '<div class="grab"></div>' + html; sh.scrollTop = 0; lockScroll(); document.getElementById('sheetwrap').classList.add('show'); }
 function closeSheet() { const w = document.getElementById('sheetwrap'); if (!w.classList.contains('show')) return; w.classList.remove('show'); unlockScroll(); }
 document.addEventListener('touchmove', e => { if (document.body.classList.contains('locked') && !e.target.closest('#sheet')) e.preventDefault(); }, { passive: false });
@@ -1366,12 +1395,12 @@ function openForm(o) {
   }).join('')}<button class="btn primary" type="button" style="margin-top:6px" onclick="submitForm()">Сохранить</button></div>`);
 }
 let formFields = [];
-// Фото сжимается до 320px по длинной стороне (JPEG), чтобы влезало в память
+// Фото сжимается до 480px по длинной стороне (JPEG), чтобы влезало в память
 function pickPhoto(inp) {
   const file = inp.files && inp.files[0]; if (!file) return;
   const url = URL.createObjectURL(file), img = new Image();
   img.onload = () => {
-    const M = 320, s = Math.min(1, M / Math.max(img.width, img.height));
+    const M = 480, s = Math.min(1, M / Math.max(img.width, img.height));
     const c = document.createElement('canvas'); c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
     c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
     const d = c.toDataURL('image/jpeg', 0.72); URL.revokeObjectURL(url);
