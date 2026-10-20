@@ -1009,14 +1009,14 @@ function calcRes(o) {
   const extra = num(c.extra);                            // постобработка, упаковка
   const fail = (mat + el + wear) * num(c.fail) / 100;    // запас на брак
   const cost = mat + el + wear + extra + fail;
-  const profit = mat * num(c.markup) / 100;              // наценка только на стоимость пластика
+  const profit = cost * num(c.markup) / 100;             // наценка на всю себестоимость
   return { mat, el, wear, extra, fail, cost, profit, price: cost + profit };
 }
 function calcResHtml(o) {
   const r = calcRes(o), c = S.calc, g = num((o || c).grams), line = (l, v) => `<div class="cl"><span>${l}</span><span>${money(v)}</span></div>`;
   return `${line('Пластик', r.mat)}${line('Электричество', r.el)}${line('Износ принтера', r.wear)}${r.extra ? line('Доп. расходы', r.extra) : ''}${num(c.fail) ? line(`Запас на брак ${num(c.fail)}%`, r.fail) : ''}
     <div class="cl tot"><span>Себестоимость</span><span>${money(r.cost)}</span></div>
-    ${num(c.markup) ? line(`Наценка ${num(c.markup)}% на пластик`, r.profit) : ''}
+    ${num(c.markup) ? line(`Наценка ${num(c.markup)}%`, r.profit) : ''}
     <div class="price"><small>${num(c.markup) ? 'Цена для клиента' : 'Итого'}</small><b>${money(r.price)}</b><small>${g ? money(r.price / g) + ' за грамм' : ''}</small></div>`;
 }
 function calcBody() {
@@ -1029,7 +1029,7 @@ function calcBody() {
   <div class="card mb" id="calcres">${calcResHtml()}</div>
   ${fil ? `<button class="btn outline mb" id="dedbtn" onclick="calcDeduct()">Напечатал — списать ${num(c.grams)} г с «${esc(fil.name)}»</button>` : ''}
   <details class="card mb cset"><summary>Параметры принтера и цены</summary>
-    <div class="cgrid">${inp('watt', 'Мощность принтера', 'Вт', 'numeric')}${inp('kwh', 'Электричество', c.cur + '/кВт·ч')}${inp('wear', 'Износ принтера', c.cur + '/ч')}${inp('fail', 'Запас на брак', '%', 'numeric')}${inp('extra', 'Доп. расходы', c.cur)}${inp('markup', 'Наценка на пластик', '%', 'numeric')}</div>
+    <div class="cgrid">${inp('watt', 'Мощность принтера', 'Вт', 'numeric')}${inp('kwh', 'Электричество', c.cur + '/кВт·ч')}${inp('wear', 'Износ принтера', c.cur + '/ч')}${inp('fail', 'Запас на брак', '%', 'numeric')}${inp('extra', 'Доп. расходы', c.cur)}${inp('markup', 'Наценка', '%', 'numeric')}</div>
     <label class="cf"><span>Валюта</span><select class="inp" onchange="S.calc.cur=this.value;save();render()">${['Ft', '€', '$', '₴', 'zł'].map(x => `<option ${x === c.cur ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
     <p class="hint">Мощность — средняя за печать (обычно 100–200 Вт, со столом на ABS больше). Электричество — посмотри в своём счёте. Износ — сопла, ремни, стол и сам принтер: примерно цена принтера ÷ 5000 часов. Параметры сохраняются и синхронизируются.</p>
   </details>`;
@@ -1071,7 +1071,7 @@ function modelsBody() {
   return `<button class="btn outline mb" onclick="modelForm()">${I.plus}Добавить модель</button>
     <div class="list">${S.models.map(m => row(m, true)).join('') || '<div class="empty">Нет моделей</div>'}</div>
     ${cat.length ? `<div class="h3">Каталог MakerWorld · ${cat.length}</div><div class="list">${cat.map(m => row(m, false)).join('')}</div>
-      <p class="hint">Цена — по настройкам калькулятора: пластик ${money(num(S.calc.price))}/кг, наценка ${num(S.calc.markup)}% на пластик.</p>` : ''}`;
+      <p class="hint">Цена — по настройкам калькулятора: пластик ${money(num(S.calc.price))}/кг, наценка ${num(S.calc.markup)}%.</p>` : ''}`;
 }
 const findModel = id => S.models.find(x => x.id === id) || MODEL_CATALOG.find(x => x.id === id);
 function modelView(id) {
