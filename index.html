@@ -57,7 +57,7 @@ svg{display:block}
 .nav button.on svg{filter:drop-shadow(0 0 8px var(--glow))}
 
 /* ---------- COMMON ---------- */
-.seg{display:grid;grid-template-columns:1fr 1fr;padding:4px;border-radius:14px;background:var(--card);border:1px solid var(--line);margin-bottom:14px}
+.seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;padding:4px;border-radius:14px;background:var(--card);border:1px solid var(--line);margin-bottom:14px}
 .seg button{padding:10px;border-radius:11px;color:var(--muted);font-weight:500;font-size:14px}
 .seg button.on{background:linear-gradient(180deg,#15365f,#0f2747);color:var(--accent2);box-shadow:inset 0 -2px 0 var(--accent)}
 .btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px;border-radius:14px;font-weight:600;font-size:15px}
@@ -192,6 +192,28 @@ svg{display:block}
 .toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom));transform:translate(-50%,20px);opacity:0;z-index:60;background:#1a2a44;border:1px solid var(--line2);padding:10px 16px;border-radius:12px;font-size:14px;transition:.25s;pointer-events:none;white-space:nowrap}
 .toast.on{opacity:1;transform:translate(-50%,0)}
 
+/* calculator */
+.cf{display:block;margin-bottom:10px}
+.cf>span{display:block;font-size:12.5px;color:var(--muted);margin-bottom:6px}
+.cgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0 10px}
+.cgrid .cf{min-width:0}
+.cin{display:flex;align-items:center;background:var(--card2);border:1px solid var(--line);border-radius:12px;padding:0 12px}
+.cin:focus-within{border-color:var(--accent)}
+.cin input{flex:1;min-width:0;width:100%;background:none;border:0;outline:0;padding:12px 0}
+.cin em{font-style:normal;color:var(--muted);font-size:12.5px;white-space:nowrap;margin-left:6px}
+.card select.inp{appearance:none;-webkit-appearance:none;background:var(--card2)}
+.cl{display:flex;justify-content:space-between;gap:10px;padding:7px 0;font-size:14px;color:#cfd9e8}
+.cl span:last-child{color:var(--text);font-variant-numeric:tabular-nums;white-space:nowrap}
+.cl.tot{border-top:1px solid var(--line);margin-top:6px;padding-top:11px;font-weight:600}
+.price{margin-top:12px;padding:14px;border-radius:14px;background:linear-gradient(160deg,#15365f,#0f2747);border:1px solid var(--line2);text-align:center}
+.price small{display:block;color:var(--muted);font-size:12px}
+.price b{display:block;font-size:30px;font-weight:800;color:var(--accent2);margin:4px 0;text-shadow:0 0 18px var(--glow)}
+.cset summary{cursor:pointer;font-weight:600;font-size:14.5px;list-style:none}
+.cset summary::-webkit-details-marker{display:none}
+.cset summary::after{content:' ▾';color:var(--muted)}
+.cset[open] summary{margin-bottom:12px}
+.hint{color:var(--muted2);font-size:12px;line-height:1.5;margin-top:4px}
+
 /* sync */
 .syncpill{position:absolute;left:0;top:20px;z-index:1;font-size:11px;padding:5px 9px;border-radius:20px;background:rgba(255,255,255,.05);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
 .syncpill.ok{color:var(--accent2)}.syncpill.err{color:var(--orange)}
@@ -277,6 +299,7 @@ const num = v => { const n = parseFloat(String(v).replace(',', '.')); return isN
 const toast = msg => { const t = document.getElementById('toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('on'), 1800); };
 
 /* ===================== DATA ===================== */
+const CALC_DEF = () => ({ fil: '', price: 7000, grams: 50, h: 3, m: 0, watt: 150, kwh: 36, wear: 50, fail: 10, extra: 0, markup: 100, cur: 'Ft' });
 function seed() {
   const t = today();
   return {
@@ -305,10 +328,10 @@ function seed() {
     ],
     weights: [[-150, 78], [-120, 77.1], [-90, 76.3], [-60, 75.0], [-30, 73.6], [0, 72.5]].map(([d, kg]) => ({ id: uid(), date: addDays(t, d), kg })),
     filaments: [
-      { id: uid(), name: 'PLA Black', color: '#1c1c1e', d: '1.75', g: 750 },
-      { id: uid(), name: 'PLA White', color: '#eceff3', d: '1.75', g: 320 },
-      { id: uid(), name: 'PETG Red', color: '#e5302f', d: '1.75', g: 500 },
-      { id: uid(), name: 'ABS Gray', color: '#7a7f88', d: '1.75', g: 200 },
+      { id: uid(), name: 'PLA Black', color: '#1c1c1e', d: '1.75', g: 750, price: 6500 },
+      { id: uid(), name: 'PLA White', color: '#eceff3', d: '1.75', g: 320, price: 6500 },
+      { id: uid(), name: 'PETG Red', color: '#e5302f', d: '1.75', g: 500, price: 7500 },
+      { id: uid(), name: 'ABS Gray', color: '#7a7f88', d: '1.75', g: 200, price: 7000 },
     ],
     models: [
       { id: uid(), emoji: '📱', name: 'Держатель для телефона', tag: 'Полезное', link: '' },
@@ -316,6 +339,7 @@ function seed() {
       { id: uid(), emoji: '🐉', name: 'Фигурка Дракон', tag: 'Декор', link: '' },
       { id: uid(), emoji: '📦', name: 'Корпус для электроники', tag: 'Электроника', link: '' },
     ],
+    calc: CALC_DEF(),
     meta: { v: 0 },
     ui: { fridgeTab: 'products', recCat: 'Все', recQ: '', printTab: 'fil', weightTab: 'chart', selDate: null },
   };
@@ -331,7 +355,7 @@ const OWNER_ID = 0; // ← впиши сюда свой Telegram ID (видно 
 const LOCKED = !!OWNER_ID && (!TG_USER || TG_USER.id !== OWNER_ID);
 const CLOUD = !LOCKED && !!(TG_USER && tg.CloudStorage && tg.isVersionAtLeast && tg.isVersionAtLeast('6.9'));
 const LKEY = `${STORE}:${TG_USER ? TG_USER.id : 'web'}`;
-const DATA_KEYS = ['products', 'recipes', 'workouts', 'weights', 'filaments', 'models'];
+const DATA_KEYS = ['products', 'recipes', 'workouts', 'weights', 'filaments', 'models', 'calc'];
 let canStore = false;
 try { localStorage.setItem('__t', '1'); localStorage.removeItem('__t'); canStore = true; } catch (e) {}
 const lsGet = k => { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } };
@@ -342,6 +366,7 @@ let PH = lsGet(LKEY + ':ph') || {}; // фото: id → dataURL
 if (!S) { const old = lsGet(STORE); if (old && old.products) { S = old; S.meta = { v: 1 }; try { localStorage.removeItem(STORE); } catch (e) {} } }
 if (!S || !S.products) S = seed();
 S.meta = S.meta || { v: 0 };
+S.calc = Object.assign(CALC_DEF(), S.calc || {});
 S.ui = Object.assign(seed().ui, S.ui || {});
 S.ui.selDate = today();
 
@@ -407,7 +432,8 @@ async function pull() {
     const ks = [...Array(meta.n || 0)].map((_, i) => 'd_' + i), got = await getMany(ks);
     const data = JSON.parse(ks.map(k => got[k] || '').join(''));
     if (dirty) return; // пользователь успел что-то изменить — его версия новее
-    DATA_KEYS.forEach(k => { if (Array.isArray(data[k])) S[k] = data[k]; });
+    DATA_KEYS.forEach(k => { if (data[k] !== undefined && data[k] !== null) S[k] = data[k]; });
+    S.calc = Object.assign(CALC_DEF(), S.calc || {});
     S.meta.v = cv; saveLocal(); render();
   } else if (cv < lv) return push();
   const need = [...refPhotos()].filter(id => !PH[id] && cloudKeys.has(`p_${id}_n`));
@@ -636,17 +662,62 @@ function delWeight(id) { S.weights = S.weights.filter(w => w.id !== id); hap(); 
 /* ---- 3D Print ---- */
 SCREENS.print = () => {
   const tab = S.ui.printTab;
-  const seg = `<div class="seg"><button class="${tab === 'fil' ? 'on' : ''}" onclick="setUI('printTab','fil')">Филаменты</button><button class="${tab === 'mod' ? 'on' : ''}" onclick="setUI('printTab','mod')">Модели</button></div>`;
-  const body = tab === 'fil'
-    ? `<button class="btn outline mb" onclick="filForm()">${I.plus}Добавить филамент</button><div class="list">${S.filaments.map(f => `<div class="row"><div class="spool ${f.photo ? 'ph' : ''}" style="${f.photo ? '' : `background:radial-gradient(circle at 35% 30%,${f.color}ee,${f.color} 45%,#000 120%)`}">${pic(f, '')}</div><div class="grow"><b>${esc(f.name)}</b><small>${esc(f.d)} мм</small></div><span class="meta ${f.g < 250 ? 'warn' : ''}">${f.g} г</span><button class="dots" onclick="filMenu('${f.id}')">${I.dots}</button></div>`).join('') || '<div class="empty">Нет филаментов</div>'}</div>`
+  const seg = `<div class="seg"><button class="${tab === 'fil' ? 'on' : ''}" onclick="setUI('printTab','fil')">Филаменты</button><button class="${tab === 'mod' ? 'on' : ''}" onclick="setUI('printTab','mod')">Модели</button><button class="${tab === 'calc' ? 'on' : ''}" onclick="setUI('printTab','calc')">Расчёт</button></div>`;
+  const body = tab === 'calc' ? calcBody() : tab === 'fil'
+    ? `<button class="btn outline mb" onclick="filForm()">${I.plus}Добавить филамент</button><div class="list">${S.filaments.map(f => `<div class="row"><div class="spool ${f.photo ? 'ph' : ''}" style="${f.photo ? '' : `background:radial-gradient(circle at 35% 30%,${f.color}ee,${f.color} 45%,#000 120%)`}">${pic(f, '')}</div><div class="grow"><b>${esc(f.name)}</b><small>${esc(f.d)} мм${num(f.price) ? ' · ' + money(num(f.price)) + '/кг' : ''}</small></div><span class="meta ${f.g < 250 ? 'warn' : ''}">${f.g} г</span><button class="dots" onclick="filMenu('${f.id}')">${I.dots}</button></div>`).join('') || '<div class="empty">Нет филаментов</div>'}</div>`
     : `<button class="btn outline mb" onclick="modelForm()">${I.plus}Добавить модель</button><div class="list">${S.models.map(m => `<div class="row"><div class="thumb">${pic(m, esc(m.emoji || '🧩'))}</div><div class="grow"><b>${esc(m.name)}</b><span class="chip">${esc(m.tag)}</span></div><button class="dl" onclick="openModel('${m.id}')">${I.dl}</button><button class="dots" onclick="modelMenu('${m.id}')">${I.dots}</button></div>`).join('') || '<div class="empty">Нет моделей</div>'}</div>`;
-  return { title: '3D Печать', tab: 'print', action: `<button class="ib accent" onclick="${tab === 'fil' ? 'filForm()' : 'modelForm()'}">${I.plus}</button>`, body: seg + body };
+  return { title: '3D Печать', tab: 'print', action: tab === 'calc' ? '' : `<button class="ib accent" onclick="${tab === 'fil' ? 'filForm()' : 'modelForm()'}">${I.plus}</button>`, body: seg + body };
 };
+/* ---- Калькулятор стоимости печати ---- */
+const money = n => (Math.round(n * 100) / 100).toLocaleString('ru', { maximumFractionDigits: S.calc.cur === 'Ft' ? 0 : 2 }) + ' ' + S.calc.cur;
+function calcRes() {
+  const c = S.calc, hours = num(c.h) + num(c.m) / 60;
+  const mat = num(c.grams) / 1000 * num(c.price);        // пластик
+  const el = num(c.watt) / 1000 * hours * num(c.kwh);    // электричество
+  const wear = hours * num(c.wear);                      // износ принтера
+  const extra = num(c.extra);                            // постобработка, упаковка
+  const fail = (mat + el + wear) * num(c.fail) / 100;    // запас на брак
+  const cost = mat + el + wear + extra + fail;
+  const profit = cost * num(c.markup) / 100;
+  return { mat, el, wear, extra, fail, cost, profit, price: cost + profit };
+}
+function calcResHtml() {
+  const r = calcRes(), c = S.calc, line = (l, v) => `<div class="cl"><span>${l}</span><span>${money(v)}</span></div>`;
+  return `${line('Пластик', r.mat)}${line('Электричество', r.el)}${line('Износ принтера', r.wear)}${r.extra ? line('Доп. расходы', r.extra) : ''}${num(c.fail) ? line(`Запас на брак ${num(c.fail)}%`, r.fail) : ''}
+    <div class="cl tot"><span>Себестоимость</span><span>${money(r.cost)}</span></div>
+    ${num(c.markup) ? line(`Наценка ${num(c.markup)}%`, r.profit) : ''}
+    <div class="price"><small>${num(c.markup) ? 'Цена для клиента' : 'Итого'}</small><b>${money(r.price)}</b><small>${num(c.grams) ? money(r.price / num(c.grams)) + ' за грамм' : ''}</small></div>`;
+}
+function calcBody() {
+  const c = S.calc, fil = S.filaments.find(f => f.id === c.fil);
+  const inp = (k, label, unit, mode = 'decimal') => `<label class="cf"><span>${label}</span><div class="cin"><input inputmode="${mode}" value="${esc(c[k])}" oninput="calcSet('${k}',this.value)" onchange="save()"><em>${unit}</em></div></label>`;
+  return `<div class="card mb">
+    <label class="cf"><span>Филамент</span><select class="inp" onchange="calcFil(this.value)"><option value="">— свой вариант —</option>${S.filaments.map(f => `<option value="${f.id}" ${f.id === c.fil ? 'selected' : ''}>${esc(f.name)} · ${f.g} г</option>`).join('')}</select></label>
+    <div class="cgrid">${inp('price', 'Цена катушки', c.cur + '/кг')}${inp('grams', 'Вес модели', 'г')}${inp('h', 'Время печати', 'ч', 'numeric')}${inp('m', '&nbsp;', 'мин', 'numeric')}</div>
+  </div>
+  <div class="card mb" id="calcres">${calcResHtml()}</div>
+  ${fil ? `<button class="btn outline mb" id="dedbtn" onclick="calcDeduct()">Напечатал — списать ${num(c.grams)} г с «${esc(fil.name)}»</button>` : ''}
+  <details class="card mb cset"><summary>Параметры принтера и цены</summary>
+    <div class="cgrid">${inp('watt', 'Мощность принтера', 'Вт', 'numeric')}${inp('kwh', 'Электричество', c.cur + '/кВт·ч')}${inp('wear', 'Износ принтера', c.cur + '/ч')}${inp('fail', 'Запас на брак', '%', 'numeric')}${inp('extra', 'Доп. расходы', c.cur)}${inp('markup', 'Наценка', '%', 'numeric')}</div>
+    <label class="cf"><span>Валюта</span><select class="inp" onchange="S.calc.cur=this.value;save();render()">${['Ft', '€', '$', '₴', 'zł'].map(x => `<option ${x === c.cur ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
+    <p class="hint">Мощность — средняя за печать (обычно 100–200 Вт, со столом на ABS больше). Электричество — посмотри в своём счёте. Износ — сопла, ремни, стол и сам принтер: примерно цена принтера ÷ 5000 часов. Параметры сохраняются и синхронизируются.</p>
+  </details>`;
+}
+function calcSet(k, v) {
+  S.calc[k] = v; document.getElementById('calcres').innerHTML = calcResHtml();
+  const b = document.getElementById('dedbtn'), f = S.filaments.find(x => x.id === S.calc.fil);
+  if (b && f) b.textContent = `Напечатал — списать ${num(S.calc.grams)} г с «${f.name}»`;
+}
+function calcFil(id) { S.calc.fil = id; const f = S.filaments.find(x => x.id === id); if (f && num(f.price)) S.calc.price = num(f.price); hap(); save(); render(); }
+function calcDeduct() {
+  const f = S.filaments.find(x => x.id === S.calc.fil), g = num(S.calc.grams); if (!f || !g) return;
+  f.g = Math.max(0, f.g - g); hap('medium'); save(); render(); toast(`Списано ${g} г · осталось ${f.g} г`);
+}
 function filForm(id) {
   const f = id ? S.filaments.find(x => x.id === id) : null;
   openForm({ title: f ? 'Изменить филамент' : 'Новый филамент', values: f || { d: '1.75', g: 1000, color: '#3d9bff' },
-    fields: [{ key: 'photo', type: 'photo' }, { key: 'name', label: 'Название', req: 1, ph: 'PLA Blue' }, { key: 'color', label: 'Цвет', type: 'color' }, { key: 'd', label: 'Диаметр', type: 'select', options: ['1.75', '2.85'] }, { key: 'g', label: 'Остаток, г', type: 'number' }],
-    onSave: v => { v.g = num(v.g); f ? Object.assign(f, v) : S.filaments.push({ id: uid(), ...v }); } });
+    fields: [{ key: 'photo', type: 'photo' }, { key: 'name', label: 'Название', req: 1, ph: 'PLA Blue' }, { key: 'color', label: 'Цвет', type: 'color' }, { key: 'd', label: 'Диаметр', type: 'select', options: ['1.75', '2.85'] }, { key: 'g', label: 'Остаток, г', type: 'number' }, { key: 'price', label: `Цена за кг (${S.calc.cur})`, type: 'number', ph: '7000' }],
+    onSave: v => { v.g = num(v.g); v.price = num(v.price); f ? Object.assign(f, v) : S.filaments.push({ id: uid(), ...v }); } });
 }
 function filMenu(id) {
   const f = S.filaments.find(x => x.id === id);
@@ -671,7 +742,8 @@ function openModel(id) { const m = S.models.find(x => x.id === id); if (!m.link)
 SCREENS.shop = () => ({ title: 'Магазин', tab: 'shop', action: `<button class="ib" onclick="openLink(SHOP_URL)">${I.ext}</button>`, body: `
   <div class="shop-hero"><div class="dragon">🐉</div><div class="cube">${I.cube}</div><h3>TOFA3D</h3><h4>STUDIO</h4><p>3D ПЕЧАТЬ • МОДЕЛИ • АКСЕССУАРЫ</p></div>
   <div class="card" style="margin-top:14px"><div class="feats"><div>${I.cube}Качественная<br>3D печать</div><div>${I.star}Уникальные<br>модели</div><div>${I.truck}Быстрая<br>доставка</div></div>
-  <button class="btn primary" onclick="openLink(SHOP_URL)">Перейти в магазин ${I.ext}</button></div>` });
+  <button class="btn primary" onclick="openLink(SHOP_URL)">Перейти в магазин ${I.ext}</button>
+  <button class="btn outline" style="margin-top:10px" onclick="S.ui.printTab='calc';navTo('print')">🧮 Калькулятор стоимости печати</button></div>` });
 
 /* ===================== SHEETS ===================== */
 const sheetEl = () => document.getElementById('sheet');
