@@ -176,6 +176,10 @@ svg{display:block}
 .spool{width:50px;height:50px;border-radius:50%;flex:none;position:relative;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08),0 4px 10px rgba(0,0,0,.4)}
 .spool::after{content:"";position:absolute;inset:16px;border-radius:50%;background:#1a1f28;box-shadow:inset 0 0 0 3px #2a303a}
 .low{font-size:10.5px;color:var(--orange);margin-left:6px;font-weight:600}
+.thumb{position:relative}.thumb>span{font-size:28px}
+.thumb img.ext{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.cost{display:inline-block;font-size:12.5px;color:var(--accent2);font-weight:600;margin:4px 0 0 4px}
+.row.tap{cursor:pointer}
 .dl{width:34px;height:34px;display:grid;place-items:center;color:var(--accent2)}
 .dl svg{width:20px;height:20px}
 
@@ -500,6 +504,12 @@ C('c67','🍫','Творожный десерт с какао',5,'Легко','�
 C('c68','🥕','Морковный салат с чесноком',10,'Легко','Перекусы',2,
  'Морковь|2 шт|морков;Чеснок|1 зубчик|чеснок;Сметана|2 ст.л.|сметан,майонез,йогурт;Сыр|30 г|сыр;~Соль|по вкусу',
  'Натри морковь и сыр на мелкой тёрке.;Добавь давленый чеснок и сметану, посоли и перемешай.'),
+];
+
+/* ===================== КАТАЛОГ МОДЕЛЕЙ (MakerWorld) =====================
+   grams / h / m — вес и время печати из профиля печати на MakerWorld.
+   img — обложка грузится напрямую с MakerWorld (в репозиторий не копируется). */
+const MODEL_CATALOG = [
 ];
 
 const CALC_DEF = () => ({ fil: '', price: 7000, grams: 50, h: 3, m: 0, watt: 150, kwh: 36, wear: 50, fail: 10, extra: 0, markup: 100, cur: 'Ft' });
@@ -923,14 +933,14 @@ SCREENS.print = () => {
   const seg = `<div class="seg"><button class="${tab === 'fil' ? 'on' : ''}" onclick="setUI('printTab','fil')">Филаменты</button><button class="${tab === 'mod' ? 'on' : ''}" onclick="setUI('printTab','mod')">Модели</button><button class="${tab === 'calc' ? 'on' : ''}" onclick="setUI('printTab','calc')">Расчёт</button></div>`;
   const body = tab === 'calc' ? calcBody() : tab === 'fil'
     ? `<button class="btn outline mb" onclick="filForm()">${I.plus}Добавить филамент</button><div class="list">${S.filaments.map(f => `<div class="row"><div class="spool ${f.photo ? 'ph' : ''}" style="${f.photo ? '' : `background:radial-gradient(circle at 35% 30%,${f.color}ee,${f.color} 45%,#000 120%)`}">${pic(f, '')}</div><div class="grow"><b>${esc(f.name)}</b><small>${esc(f.d)} мм${num(f.price) ? ' · ' + money(num(f.price)) + '/кг' : ''}</small></div><span class="meta ${f.g < 250 ? 'warn' : ''}">${f.g} г</span><button class="dots" onclick="filMenu('${f.id}')">${I.dots}</button></div>`).join('') || '<div class="empty">Нет филаментов</div>'}</div>`
-    : `<button class="btn outline mb" onclick="modelForm()">${I.plus}Добавить модель</button><div class="list">${S.models.map(m => `<div class="row"><div class="thumb">${pic(m, esc(m.emoji || '🧩'))}</div><div class="grow"><b>${esc(m.name)}</b><span class="chip">${esc(m.tag)}</span></div><button class="dl" onclick="openModel('${m.id}')">${I.dl}</button><button class="dots" onclick="modelMenu('${m.id}')">${I.dots}</button></div>`).join('') || '<div class="empty">Нет моделей</div>'}</div>`;
+    : modelsBody();
   return { title: '3D Печать', tab: 'print', action: tab === 'calc' ? '' : `<button class="ib accent" onclick="${tab === 'fil' ? 'filForm()' : 'modelForm()'}">${I.plus}</button>`, body: seg + body };
 };
 /* ---- Калькулятор стоимости печати ---- */
 const money = n => (Math.round(n * 100) / 100).toLocaleString('ru', { maximumFractionDigits: S.calc.cur === 'Ft' ? 0 : 2 }) + ' ' + S.calc.cur;
-function calcRes() {
-  const c = S.calc, hours = num(c.h) + num(c.m) / 60;
-  const mat = num(c.grams) / 1000 * num(c.price);        // пластик
+function calcRes(o) {
+  const c = S.calc, src = o || c, hours = num(src.h) + num(src.m) / 60;
+  const mat = num(src.grams) / 1000 * num(c.price);        // пластик
   const el = num(c.watt) / 1000 * hours * num(c.kwh);    // электричество
   const wear = hours * num(c.wear);                      // износ принтера
   const extra = num(c.extra);                            // постобработка, упаковка
@@ -939,12 +949,12 @@ function calcRes() {
   const profit = cost * num(c.markup) / 100;
   return { mat, el, wear, extra, fail, cost, profit, price: cost + profit };
 }
-function calcResHtml() {
-  const r = calcRes(), c = S.calc, line = (l, v) => `<div class="cl"><span>${l}</span><span>${money(v)}</span></div>`;
+function calcResHtml(o) {
+  const r = calcRes(o), c = S.calc, g = num((o || c).grams), line = (l, v) => `<div class="cl"><span>${l}</span><span>${money(v)}</span></div>`;
   return `${line('Пластик', r.mat)}${line('Электричество', r.el)}${line('Износ принтера', r.wear)}${r.extra ? line('Доп. расходы', r.extra) : ''}${num(c.fail) ? line(`Запас на брак ${num(c.fail)}%`, r.fail) : ''}
     <div class="cl tot"><span>Себестоимость</span><span>${money(r.cost)}</span></div>
     ${num(c.markup) ? line(`Наценка ${num(c.markup)}%`, r.profit) : ''}
-    <div class="price"><small>${num(c.markup) ? 'Цена для клиента' : 'Итого'}</small><b>${money(r.price)}</b><small>${num(c.grams) ? money(r.price / num(c.grams)) + ' за грамм' : ''}</small></div>`;
+    <div class="price"><small>${num(c.markup) ? 'Цена для клиента' : 'Итого'}</small><b>${money(r.price)}</b><small>${g ? money(r.price / g) + ' за грамм' : ''}</small></div>`;
 }
 function calcBody() {
   const c = S.calc, fil = S.filaments.find(f => f.id === c.fil);
@@ -984,17 +994,55 @@ function filMenu(id) {
     { label: 'Изменить', fn: () => filForm(id), keep: 1 },
     { label: 'Удалить', danger: 1, fn: () => { S.filaments = S.filaments.filter(x => x.id !== id); toast('Удалено'); } }]);
 }
+const fmtTime = (h, m) => { h = num(h); m = num(m); return [h ? h + ' ч' : '', m ? m + ' мин' : ''].filter(Boolean).join(' ') || '—'; };
+function costChip(o) { return num(o.grams) ? `<span class="chip">⚖ ${num(o.grams)} г${num(o.h) || num(o.m) ? ' · ⏱ ' + fmtTime(o.h, o.m) : ''}</span><span class="cost">≈ ${money(calcRes(o).price)}</span>` : ''; }
+function mThumb(m) {
+  const s = photoSrc(m.photo); if (s) return `<img src="${esc(s)}" alt="">`;
+  return `<span>${esc(m.emoji || '🧩')}</span>${m.img ? `<img class="ext" src="${esc(m.img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}`;
+}
+function modelsBody() {
+  const row = (m, mine) => `<div class="row tap" onclick="modelView('${m.id}')"><div class="thumb">${mThumb(m)}</div><div class="grow"><b>${esc(m.name)}</b>${(mine ? m.tag : m.cat) ? `<span class="chip">${esc(mine ? m.tag : m.cat)}</span> ` : ''}${costChip(m)}</div>${mine
+    ? `<button class="dots" onclick="event.stopPropagation();modelMenu('${m.id}')">${I.dots}</button>`
+    : `<button class="fav" onclick="event.stopPropagation();saveModel('${m.id}')">${I.heart}</button>`}</div>`;
+  const cat = MODEL_CATALOG.filter(c => !S.models.some(m => m.from === c.id));
+  return `<button class="btn outline mb" onclick="modelForm()">${I.plus}Добавить модель</button>
+    <div class="list">${S.models.map(m => row(m, true)).join('') || '<div class="empty">Нет моделей</div>'}</div>
+    ${cat.length ? `<div class="h3">Каталог MakerWorld · ${cat.length}</div><div class="list">${cat.map(m => row(m, false)).join('')}</div>
+      <p class="hint">Цена — по настройкам калькулятора: пластик ${money(num(S.calc.price))}/кг, наценка ${num(S.calc.markup)}%.</p>` : ''}`;
+}
+const findModel = id => S.models.find(x => x.id === id) || MODEL_CATALOG.find(x => x.id === id);
+function modelView(id) {
+  const m = findModel(id); if (!m) return;
+  const mine = S.models.includes(m), src = photoSrc(m.photo) || m.img || '', link = m.link || m.url;
+  openSheet(`${src ? `<img class="hero-img" src="${esc(src)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : `<div class="rv-emoji">${esc(m.emoji || '🧩')}</div>`}
+    <h3>${esc(m.name)}</h3>
+    ${m.author || m.profile ? `<p class="hint" style="margin:-8px 0 12px">${m.author ? 'Автор: ' + esc(m.author) : ''}${m.author && m.profile ? ' · ' : ''}${m.profile ? 'профиль: ' + esc(m.profile) : ''}</p>` : ''}
+    ${num(m.grams) ? `<div class="cl"><span>Вес / время печати</span><span>${num(m.grams)} г · ${fmtTime(m.h, m.m)}</span></div><div class="card mb" style="margin-top:8px">${calcResHtml(m)}</div>` : '<p class="hint mb">Укажи вес и время печати — посчитаю стоимость.</p>'}
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${link ? `<button class="btn primary" onclick="openModel('${m.id}')">Открыть модель ${I.ext}</button>` : ''}
+      ${num(m.grams) ? `<button class="btn outline" onclick="closeSheet();toCalc('${m.id}')">🧮 Открыть в калькуляторе</button>` : ''}
+      ${mine ? `<button class="btn ghost" onclick="closeSheet();modelForm('${m.id}')">Изменить</button>` : `<button class="btn ghost" onclick="closeSheet();saveModel('${m.id}')">❤︎ В мои модели</button>`}
+    </div>`);
+}
+function toCalc(id) { const m = findModel(id); if (!m) return; Object.assign(S.calc, { grams: num(m.grams), h: num(m.h), m: num(m.m) }); S.ui.printTab = 'calc'; hap(); save(); render(); window.scrollTo(0, 0); }
+function saveModel(id) {
+  const c = MODEL_CATALOG.find(x => x.id === id); if (!c || S.models.some(m => m.from === id)) return;
+  S.models.push({ id: uid(), from: c.id, name: c.name, tag: c.cat || '', link: c.url, img: c.img || '', emoji: c.emoji || '🧩', grams: c.grams, h: c.h, m: c.m, author: c.author || '', profile: c.profile || '' });
+  hap('medium'); save(); render(); toast('Добавлено в мои модели ❤︎');
+}
 function modelForm(id) {
   const m = id ? S.models.find(x => x.id === id) : null;
   openForm({ title: m ? 'Изменить модель' : 'Новая модель', values: m || {},
-    fields: [{ key: 'photo', type: 'photo' }, { key: 'emoji', label: 'Эмодзи (если без фото)', ph: '🧩' }, { key: 'name', label: 'Название', req: 1 }, { key: 'tag', label: 'Категория', ph: 'Полезное' }, { key: 'link', label: 'Ссылка на файл (Printables, Thingiverse…)', type: 'url', ph: 'https://' }],
-    onSave: v => m ? Object.assign(m, v) : S.models.push({ id: uid(), ...v }) });
+    fields: [{ key: 'photo', type: 'photo' }, { key: 'emoji', label: 'Эмодзи (если без фото)', ph: '🧩' }, { key: 'name', label: 'Название', req: 1 }, { key: 'tag', label: 'Категория', ph: 'Полезное' },
+      { key: 'link', label: 'Ссылка (MakerWorld, Printables…)', type: 'url', ph: 'https://' },
+      { key: 'grams', label: 'Вес печати, г', type: 'number', ph: '45' }, { key: 'h', label: 'Время печати — часы', type: 'number', ph: '2' }, { key: 'm', label: 'Время печати — минуты', type: 'number', ph: '30' }],
+    onSave: v => { ['grams', 'h', 'm'].forEach(k => v[k] = num(v[k])); m ? Object.assign(m, v) : S.models.push({ id: uid(), ...v }); } });
 }
 function modelMenu(id) {
   const m = S.models.find(x => x.id === id);
   openActions(m.name, [{ label: 'Изменить', fn: () => modelForm(id), keep: 1 }, { label: 'Удалить', danger: 1, fn: () => { S.models = S.models.filter(x => x.id !== id); toast('Удалено'); } }]);
 }
-function openModel(id) { const m = S.models.find(x => x.id === id); if (!m.link) return toast('Ссылка не указана'); openLink(m.link); }
+function openModel(id) { const m = findModel(id), l = m && (m.link || m.url); if (!l) return toast('Ссылка не указана'); openLink(l); }
 
 /* ---- Shop ---- */
 SCREENS.shop = () => ({ title: 'Магазин', tab: 'shop', action: `<button class="ib" onclick="openLink(SHOP_URL)">${I.ext}</button>`, body: `
