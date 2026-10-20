@@ -1221,7 +1221,7 @@ function finFile(inp) {
       const rr = parseCSV(text), h = (rr[0] || []).map(x => x.trim());
       const p = PARSERS.find(p => p.test(h)); if (p) { rows = rr; P = p; break; }
     }
-    if (!P) return openSheet(`<h3>Формат не узнал</h3><p class="hint" style="font-size:14px">Пока поддерживается Revolut (CSV). Выписку UniCredit добавим, как только будет пример файла.</p>`);
+    if (!P) return openSheet(`<h3>Это не похоже на выписку</h3><p class="hint" style="font-size:14px">Файл «${esc(file.name)}» не узнан. Нужна выписка <b>Revolut в формате CSV</b> (имя вида <i>account-statement_….csv</i>, обычно лежит в «Загрузках»). Выписки UniCredit добавим, как только будет пример файла.</p>`);
     finImport(P, P.parse(rows));
   };
   fr.onerror = () => toast('Не удалось прочитать файл');
@@ -1269,7 +1269,7 @@ function finMonthData(ym) {
 }
 SCREENS.finance = () => {
   const action = `<button class="ib accent" onclick="document.getElementById('finfile').click()">${I.plus}</button>`;
-  const inputEl = `<input type="file" id="finfile" accept=".csv,text/csv,.xlsx,.xls" style="display:none" onchange="finFile(this)">`;
+  const inputEl = `<input type="file" id="finfile" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" onchange="finFile(this)">`;
   if (!S.fin.tx.length) return { title: 'Финансы', tab: '', action, body: inputEl + `<div class="card empty" style="padding:28px 16px"><div class="e">💳</div><b style="color:var(--text);font-size:16px">Загрузи выписку из банка</b>
     <p style="margin:10px 0 16px;line-height:1.5">Revolut → счёт → … → <b>Выписка</b> → формат <b>CSV</b>.<br>Приложение само разложит траты по категориям и уберёт переводы между твоими счетами.</p>
     <button class="btn primary" onclick="document.getElementById('finfile').click()">Выбрать файл</button>
