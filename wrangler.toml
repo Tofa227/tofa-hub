@@ -1,0 +1,6 @@
+# Cloudflare Worker «tofa-hub» — прокси для цены и фото по ссылке (worker.js).
+# Само приложение живёт на GitHub Pages; здесь выкладывается только воркер.
+name = "tofa-hub"
+main = "worker.js"
+compatibility_date = "2026-10-20"
+workers_dev = true
